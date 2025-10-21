@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -137,6 +137,18 @@ export async function getAllUserMessages(userId: string) {
   
   const { inArray } = await import("drizzle-orm");
   return db.select().from(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
+}
+
+export async function getAllChatSessions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(chatSessions).orderBy(desc(chatSessions.createdAt));
+}
+
+export async function getAllChatMessages() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(chatMessages).orderBy(desc(chatMessages.createdAt));
 }
 
 // Parental Settings

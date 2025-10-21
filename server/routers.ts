@@ -97,6 +97,16 @@ export const appRouter = router({
       .query(async ({ ctx }) => {
         return db.getUserChatSessions(ctx.user.id);
       }),
+
+    getAllSessionsPublic: publicProcedure
+      .query(async () => {
+        return db.getAllChatSessions();
+      }),
+
+    getAllMessagesPublic: publicProcedure
+      .query(async () => {
+        return db.getAllChatMessages();
+      }),
   }),
 
   parent: router({
