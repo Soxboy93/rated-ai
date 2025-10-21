@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -85,4 +85,79 @@ export async function getUser(id: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Chat Sessions
+export async function createChatSession(session: InsertChatSession) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(chatSessions).values(session);
+  return session;
+}
+
+export async function getChatSession(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(chatSessions).where(eq(chatSessions.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserChatSessions(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(chatSessions).where(eq(chatSessions.userId, userId));
+}
+
+export async function updateSessionLastMessage(sessionId: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(chatSessions)
+    .set({ lastMessageAt: new Date() })
+    .where(eq(chatSessions.id, sessionId));
+}
+
+// Chat Messages
+export async function createChatMessage(message: InsertChatMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(chatMessages).values(message);
+  return message;
+}
+
+export async function getSessionMessages(sessionId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId));
+}
+
+export async function getAllUserMessages(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const sessions = await getUserChatSessions(userId);
+  const sessionIds = sessions.map(s => s.id);
+  if (sessionIds.length === 0) return [];
+  
+  const { inArray } = await import("drizzle-orm");
+  return db.select().from(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
+}
+
+// Parental Settings
+export async function createParentalSettings(settings: InsertParentalSettings) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(parentalSettings).values(settings);
+  return settings;
+}
+
+export async function getParentalSettings(userId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(parentalSettings).where(eq(parentalSettings.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateParentalSettings(userId: string, updates: Partial<InsertParentalSettings>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(parentalSettings)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(eq(parentalSettings.userId, userId));
+}

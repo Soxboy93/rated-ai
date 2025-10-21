@@ -1,5 +1,27 @@
 {
   "version": "7",
   "dialect": "mysql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1761056079234,
+      "tag": "0000_strange_lilith",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1761056251184,
+      "tag": "0001_common_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1761056722769,
+      "tag": "0002_fresh_dragon_lord",
+      "breakpoints": true
+    }
+  ]
 }
