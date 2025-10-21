@@ -92,6 +92,11 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return db.getSessionMessages(input.sessionId);
       }),
+
+    getAllSessions: protectedProcedure
+      .query(async ({ ctx }) => {
+        return db.getUserChatSessions(ctx.user.id);
+      }),
   }),
 
   parent: router({

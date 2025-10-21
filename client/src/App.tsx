@@ -5,14 +5,14 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import EnhancedChat from "./pages/EnhancedChat";
-import ParentDashboard from "./pages/ParentDashboard";
+import EnhancedParentDashboard from "./pages/EnhancedParentDashboard";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={EnhancedChat} />
-      <Route path={"/parent"} component={ParentDashboard} />
+      <Route path={"/parent"} component={EnhancedParentDashboard} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
