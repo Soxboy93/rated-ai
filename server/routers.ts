@@ -109,6 +109,48 @@ export const appRouter = router({
       }),
   }),
 
+  creative: router({
+    generateStory: publicProcedure
+      .input(z.object({ prompt: z.string() }))
+      .mutation(async ({ input }) => {
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: "You are a creative children's story writer. Write engaging, age-appropriate stories that are fun, educational, and inspire imagination. Keep stories between 200-400 words."
+            },
+            {
+              role: "user",
+              content: `Write a creative children's story about: ${input.prompt}`
+            }
+          ],
+        });
+
+        const content = typeof response.choices[0].message.content === 'string' 
+          ? response.choices[0].message.content 
+          : "Once upon a time...";
+
+        return { content };
+      }),
+
+    generateIllustration: publicProcedure
+      .input(z.object({ prompt: z.string() }))
+      .mutation(async ({ input }) => {
+        const { generateImage } = await import("./_core/imageGeneration");
+        const result = await generateImage({ prompt: input.prompt });
+        return { imageUrl: result.url };
+      }),
+
+    generateAvatar: publicProcedure
+      .input(z.object({ childName: z.string(), style: z.string() }))
+      .mutation(async ({ input }) => {
+        const { generateImage } = await import("./_core/imageGeneration");
+        const prompt = `Cute cartoon avatar for a child named ${input.childName}, ${input.style} style, friendly, colorful, simple design, profile picture`;
+        const result = await generateImage({ prompt });
+        return { avatarUrl: result.url };
+      }),
+  }),
+
   parent: router({
     setupPassword: protectedProcedure
       .input(z.object({ password: z.string().min(6) }))

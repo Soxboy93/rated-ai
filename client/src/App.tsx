@@ -6,6 +6,8 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import EnhancedChat from "./pages/EnhancedChat";
 import SimpleParentDashboard from "./pages/SimpleParentDashboard";
+import StoryStudio from "./pages/StoryStudio";
+import Achievements from "./pages/Achievements";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -13,6 +15,8 @@ function Router() {
     <Switch>
       <Route path={"/"} component={EnhancedChat} />
       <Route path={"/parent"} component={SimpleParentDashboard} />
+      <Route path={"/story-studio"} component={StoryStudio} />
+      <Route path={"/achievements"} component={Achievements} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

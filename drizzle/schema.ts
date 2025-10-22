@@ -92,3 +92,49 @@ export const learningProgress = mysqlTable("learningProgress", {
 
 export type LearningProgress = typeof learningProgress.$inferSelect;
 export type InsertLearningProgress = typeof learningProgress.$inferInsert;
+
+/**
+ * Achievements table - tracks badges and milestones
+ */
+export const achievements = mysqlTable("achievements", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 100 }).notNull(),
+  description: text("description"),
+  badgeImage: text("badgeImage"),
+  earnedAt: timestamp("earnedAt").defaultNow(),
+});
+
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertAchievement = typeof achievements.$inferInsert;
+
+/**
+ * Story creations table - stores AI-generated stories with illustrations
+ */
+export const storyCreations = mysqlTable("storyCreations", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  illustrations: text("illustrations"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type StoryCreation = typeof storyCreations.$inferSelect;
+export type InsertStoryCreation = typeof storyCreations.$inferInsert;
+
+/**
+ * Mood tracking table - tracks emotional states
+ */
+export const moodEntries = mysqlTable("moodEntries", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  mood: varchar("mood", { length: 20 }).notNull(),
+  emoji: varchar("emoji", { length: 10 }).notNull(),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type MoodEntry = typeof moodEntries.$inferSelect;
+export type InsertMoodEntry = typeof moodEntries.$inferInsert;

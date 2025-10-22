@@ -275,8 +275,61 @@ export default function EnhancedChat() {
         </div>
       </header>
 
-      {/* Simple Menu Overlay */}
+      {/* Enhanced Menu Overlay */}
       {showMenu && (
+        <div className="absolute top-16 right-4 bg-white rounded-lg shadow-2xl border-2 border-purple-200 p-4 z-50 min-w-[250px]">
+          <div className="space-y-2">
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3"
+              onClick={() => {
+                setShowMenu(false);
+                setLocation("/story-studio");
+              }}
+            >
+              <span className="text-2xl">📚</span>
+              <span>Story Studio</span>
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3"
+              onClick={() => {
+                setShowMenu(false);
+                setLocation("/achievements");
+              }}
+            >
+              <span className="text-2xl">🏆</span>
+              <span>Achievements</span>
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3"
+              onClick={() => {
+                setShowMenu(false);
+                setLocation("/parent");
+              }}
+            >
+              <span className="text-2xl">👨‍👩‍👧</span>
+              <span>Parent Dashboard</span>
+            </Button>
+            <div className="border-t border-gray-200 my-2" />
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3"
+              onClick={() => {
+                setShowMenu(false);
+                window.location.reload();
+              }}
+            >
+              <span className="text-2xl">🔄</span>
+              <span>New Chat</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Old menu overlay - remove if exists */}
+      {false && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowMenu(false)}>
           <Card className="max-w-md w-full m-4 p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
