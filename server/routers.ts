@@ -151,6 +151,153 @@ export const appRouter = router({
       }),
   }),
 
+  homework: router({
+    analyzeHomework: publicProcedure
+      .input(z.object({
+        imageData: z.string(), // base64 encoded image
+        subject: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const homeworkId = randomUUID();
+        
+        // Call OpenAI with Vision API to analyze the homework
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful homework tutor for students. Analyze the homework problem in the image and provide a clear, step-by-step solution. Break down complex problems into simple steps. Be encouraging and educational. Format your response as JSON with these fields: question (the problem statement), steps (array of solution steps), answer (final answer), explanation (why this solution works), subject (detected subject area), difficulty (easy/medium/hard)."
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Please analyze this ${input.subject || 'homework'} problem and provide a step-by-step solution.`
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:image/jpeg;base64,${input.imageData}`
+                  }
+                }
+              ]
+            }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "homework_solution",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  question: { type: "string", description: "The homework problem statement" },
+                  steps: { 
+                    type: "array", 
+                    items: { type: "string" },
+                    description: "Step-by-step solution" 
+                  },
+                  answer: { type: "string", description: "Final answer" },
+                  explanation: { type: "string", description: "Why this solution works" },
+                  subject: { type: "string", description: "Detected subject area" },
+                  difficulty: { type: "string", description: "Difficulty level" }
+                },
+                required: ["question", "steps", "answer", "explanation", "subject", "difficulty"],
+                additionalProperties: false
+              }
+            }
+          }
+        });
+
+        const content = typeof response.choices[0].message.content === 'string' 
+          ? JSON.parse(response.choices[0].message.content)
+          : { question: "Unable to analyze", steps: [], answer: "", explanation: "", subject: "unknown", difficulty: "unknown" };
+        
+        // Save to database
+        await db.createHomeworkSubmission({
+          id: homeworkId,
+          userId: "anonymous",
+          subject: content.subject,
+          question: content.question,
+          solution: content.answer,
+          steps: JSON.stringify(content.steps),
+          difficulty: content.difficulty,
+          completed: true,
+        });
+
+        return content;
+      }),
+
+    getHomeworkHistory: publicProcedure
+      .query(async () => {
+        return db.getAllHomeworkSubmissions();
+      }),
+  }),
+
+  pet: router({
+    getMyPet: publicProcedure
+      .query(async () => {
+        return db.getUserPet("anonymous");
+      }),
+
+    createPet: publicProcedure
+      .input(z.object({
+        type: z.string(),
+        name: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const petId = randomUUID();
+        await db.createVirtualPet({
+          id: petId,
+          userId: "anonymous",
+          type: input.type,
+          name: input.name,
+          level: 1,
+          experience: 0,
+          happiness: 100,
+          hunger: 0,
+          evolution: "baby",
+        });
+        return { success: true };
+      }),
+
+    feedPet: publicProcedure
+      .mutation(async () => {
+        const pet = await db.getUserPet("anonymous");
+        if (!pet) return { success: false };
+        
+        await db.updateVirtualPet(pet.id, {
+          hunger: Math.max(0, (pet.hunger || 0) - 30),
+          happiness: Math.min(100, (pet.happiness || 100) + 10),
+          lastFed: new Date(),
+        });
+        return { success: true };
+      }),
+
+    playWithPet: publicProcedure
+      .mutation(async () => {
+        const pet = await db.getUserPet("anonymous");
+        if (!pet) return { success: false };
+        
+        const newExperience = (pet.experience || 0) + 20;
+        const newLevel = Math.floor(newExperience / 100) + 1;
+        let evolution = pet.evolution || "baby";
+        
+        if (newLevel >= 10) evolution = "adult";
+        else if (newLevel >= 5) evolution = "teen";
+        else if (newLevel >= 2) evolution = "child";
+        
+        await db.updateVirtualPet(pet.id, {
+          experience: newExperience,
+          level: newLevel,
+          happiness: Math.min(100, (pet.happiness || 100) + 15),
+          hunger: Math.min(100, (pet.hunger || 0) + 5),
+          evolution,
+        });
+        return { success: true };
+      }),
+  }),
+
   parent: router({
     setupPassword: protectedProcedure
       .input(z.object({ password: z.string().min(6) }))

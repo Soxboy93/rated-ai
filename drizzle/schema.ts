@@ -138,3 +138,155 @@ export const moodEntries = mysqlTable("moodEntries", {
 
 export type MoodEntry = typeof moodEntries.$inferSelect;
 export type InsertMoodEntry = typeof moodEntries.$inferInsert;
+
+
+import { boolean, int } from "drizzle-orm/mysql-core";
+
+/**
+ * Homework submissions table - tracks homework help requests
+ */
+export const homeworkSubmissions = mysqlTable("homeworkSubmissions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  sessionId: varchar("sessionId", { length: 64 }),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  subject: varchar("subject", { length: 50 }),
+  question: text("question"),
+  imageUrl: text("imageUrl"),
+  solution: text("solution"),
+  steps: text("steps"), // JSON array of solution steps
+  difficulty: varchar("difficulty", { length: 20 }),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type HomeworkSubmission = typeof homeworkSubmissions.$inferSelect;
+export type InsertHomeworkSubmission = typeof homeworkSubmissions.$inferInsert;
+
+/**
+ * Reading sessions table - tracks reading practice sessions
+ */
+export const readingSessions = mysqlTable("readingSessions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  text: text("text"),
+  audioUrl: text("audioUrl"),
+  transcription: text("transcription"),
+  readingLevel: varchar("readingLevel", { length: 20 }),
+  accuracy: int("accuracy"), // percentage
+  wordsPerMinute: int("wordsPerMinute"),
+  comprehensionScore: int("comprehensionScore"),
+  feedback: text("feedback"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type ReadingSession = typeof readingSessions.$inferSelect;
+export type InsertReadingSession = typeof readingSessions.$inferInsert;
+
+/**
+ * Virtual pets table - tracks user's virtual learning companion
+ */
+export const virtualPets = mysqlTable("virtualPets", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull().unique(),
+  name: varchar("name", { length: 100 }),
+  type: varchar("type", { length: 50 }), // dragon, unicorn, robot, etc.
+  level: int("level").default(1),
+  experience: int("experience").default(0),
+  happiness: int("happiness").default(100),
+  hunger: int("hunger").default(0),
+  evolution: varchar("evolution", { length: 50 }).default("baby"),
+  lastFed: timestamp("lastFed").defaultNow(),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type VirtualPet = typeof virtualPets.$inferSelect;
+export type InsertVirtualPet = typeof virtualPets.$inferInsert;
+
+/**
+ * Family challenges table - stores learning challenges for families
+ */
+export const familyChallenges = mysqlTable("familyChallenges", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  title: varchar("title", { length: 200 }),
+  description: text("description"),
+  type: varchar("type", { length: 50 }), // trivia, math_race, story_writing
+  difficulty: varchar("difficulty", { length: 20 }),
+  questions: text("questions"), // JSON array
+  startDate: timestamp("startDate"),
+  endDate: timestamp("endDate"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type FamilyChallenge = typeof familyChallenges.$inferSelect;
+export type InsertFamilyChallenge = typeof familyChallenges.$inferInsert;
+
+/**
+ * Challenge participants table - tracks who participates in challenges
+ */
+export const challengeParticipants = mysqlTable("challengeParticipants", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  challengeId: varchar("challengeId", { length: 64 }),
+  userId: varchar("userId", { length: 64 }),
+  userName: varchar("userName", { length: 100 }),
+  score: int("score").default(0),
+  completed: boolean("completed").default(false),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type ChallengeParticipant = typeof challengeParticipants.$inferSelect;
+export type InsertChallengeParticipant = typeof challengeParticipants.$inferInsert;
+
+/**
+ * Learning streaks table - tracks daily learning streaks
+ */
+export const learningStreaks = mysqlTable("learningStreaks", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull().unique(),
+  currentStreak: int("currentStreak").default(0),
+  longestStreak: int("longestStreak").default(0),
+  lastActivityDate: timestamp("lastActivityDate").defaultNow(),
+  freezesAvailable: int("freezesAvailable").default(2),
+  totalPoints: int("totalPoints").default(0),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type LearningStreak = typeof learningStreaks.$inferSelect;
+export type InsertLearningStreak = typeof learningStreaks.$inferInsert;
+
+/**
+ * Quests table - stores available learning quests
+ */
+export const quests = mysqlTable("quests", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  title: varchar("title", { length: 200 }),
+  description: text("description"),
+  category: varchar("category", { length: 50 }),
+  difficulty: int("difficulty").default(1),
+  requiredLevel: int("requiredLevel").default(1),
+  rewards: text("rewards"), // JSON
+  tasks: text("tasks"), // JSON array of tasks
+  active: boolean("active").default(true),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type Quest = typeof quests.$inferSelect;
+export type InsertQuest = typeof quests.$inferInsert;
+
+/**
+ * User quests progress table - tracks individual quest progress
+ */
+export const userQuests = mysqlTable("userQuests", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  questId: varchar("questId", { length: 64 }),
+  progress: int("progress").default(0),
+  completed: boolean("completed").default(false),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type UserQuest = typeof userQuests.$inferSelect;
+export type InsertUserQuest = typeof userQuests.$inferInsert;
+

@@ -29,6 +29,13 @@
       "when": 1761161675399,
       "tag": "0003_slim_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1761482454043,
+      "tag": "0004_even_champions",
+      "breakpoints": true
     }
   ]
 }

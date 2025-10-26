@@ -8,6 +8,8 @@ import EnhancedChat from "./pages/EnhancedChat";
 import SimpleParentDashboard from "./pages/SimpleParentDashboard";
 import StoryStudio from "./pages/StoryStudio";
 import Achievements from "./pages/Achievements";
+import HomeworkHelper from "./pages/HomeworkHelper";
+import VirtualPet from "./pages/VirtualPet";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -17,6 +19,8 @@ function Router() {
       <Route path={"/parent"} component={SimpleParentDashboard} />
       <Route path={"/story-studio"} component={StoryStudio} />
       <Route path={"/achievements"} component={Achievements} />
+      <Route path={"/homework"} component={HomeworkHelper} />
+      <Route path={"/pet"} component={VirtualPet} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings } from "../drizzle/schema";
+import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -173,3 +173,48 @@ export async function updateParentalSettings(userId: string, updates: Partial<In
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(parentalSettings.userId, userId));
 }
+
+
+// Homework Submissions
+export async function createHomeworkSubmission(submission: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(homeworkSubmissions).values(submission);
+  return submission;
+}
+
+export async function getAllHomeworkSubmissions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(homeworkSubmissions).orderBy(desc(homeworkSubmissions.createdAt));
+}
+
+export async function getUserHomeworkSubmissions(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(homeworkSubmissions).where(eq(homeworkSubmissions.userId, userId)).orderBy(desc(homeworkSubmissions.createdAt));
+}
+
+
+
+// Virtual Pets
+export async function createVirtualPet(pet: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(virtualPets).values(pet);
+  return pet;
+}
+
+export async function getUserPet(userId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(virtualPets).where(eq(virtualPets.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateVirtualPet(petId: string, updates: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(virtualPets).set(updates).where(eq(virtualPets.id, petId));
+}
+
