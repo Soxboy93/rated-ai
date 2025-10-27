@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics } from "../drizzle/schema";
+import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -279,4 +279,62 @@ export async function getProgressMetrics(userId: string, days: number = 30) {
     .where(eq(progressMetrics.userId, userId))
     .orderBy(desc(progressMetrics.date));
 }
+
+
+
+// Weekly Summaries
+export async function createWeeklySummary(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(weeklySummaries).values(data);
+  return data;
+}
+
+export async function getLatestWeeklySummary(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db
+    .select()
+    .from(weeklySummaries)
+    .where(eq(weeklySummaries.userId, userId))
+    .orderBy(desc(weeklySummaries.createdAt))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+// Study Reminders
+export async function createStudyReminder(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(studyReminders).values(data);
+  return data;
+}
+
+export async function getStudyReminder(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db
+    .select()
+    .from(studyReminders)
+    .where(eq(studyReminders.userId, userId))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateStudyStreak(userId: string, streak: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(studyReminders)
+    .set({ streak, lastStudyDate: new Date() })
+    .where(eq(studyReminders.userId, userId));
+}
+
+// Export table references for routers
+export { weeklySummaries, studyReminders };
 

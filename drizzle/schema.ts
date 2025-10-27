@@ -349,3 +349,37 @@ export const progressMetrics = mysqlTable("progressMetrics", {
 export type ProgressMetric = typeof progressMetrics.$inferSelect;
 export type InsertProgressMetric = typeof progressMetrics.$inferInsert;
 
+
+// Weekly Summary Emails
+export const weeklySummaries = mysqlTable("weekly_summaries", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  weekStart: timestamp("weekStart").notNull(),
+  weekEnd: timestamp("weekEnd").notNull(),
+  totalMessages: int("totalMessages").notNull(),
+  totalSessions: int("totalSessions").notNull(),
+  topicsCovered: text("topicsCovered"),
+  strengths: text("strengths"),
+  areasToImprove: text("areasToImprove"),
+  recommendations: text("recommendations"),
+  emailSent: boolean("emailSent").default(false),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type WeeklySummary = typeof weeklySummaries.$inferSelect;
+export type InsertWeeklySummary = typeof weeklySummaries.$inferInsert;
+
+// Study Reminders
+export const studyReminders = mysqlTable("study_reminders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  preferredTime: varchar("preferredTime", { length: 10 }), // "14:30" format
+  enabled: boolean("enabled").default(true),
+  streak: int("streak").default(0),
+  lastStudyDate: timestamp("lastStudyDate"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type StudyReminder = typeof studyReminders.$inferSelect;
+export type InsertStudyReminder = typeof studyReminders.$inferInsert;
+

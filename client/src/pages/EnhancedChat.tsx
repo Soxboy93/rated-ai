@@ -306,6 +306,17 @@ export default function EnhancedChat() {
               className="w-full justify-start gap-3"
               onClick={() => {
                 setShowMenu(false);
+                setLocation("/weekly-summary");
+              }}
+            >
+              <span className="text-2xl">📧</span>
+              <span>Weekly Summary</span>
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3"
+              onClick={() => {
+                setShowMenu(false);
                 setLocation("/story-studio");
               }}
             >

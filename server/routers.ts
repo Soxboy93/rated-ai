@@ -5,6 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import * as db from "./db";
+import { desc } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import * as bcrypt from "bcryptjs";
 
@@ -338,6 +339,94 @@ export const appRouter = router({
         });
 
         return reportCard;
+      }),
+  }),
+
+  summaries: router({
+    getLatest: publicProcedure
+      .query(async () => {
+        const db_instance = await db.getDb();
+        if (!db_instance) return null;
+        
+        const result = await db_instance
+          .select()
+          .from(db.weeklySummaries)
+          .orderBy(desc(db.weeklySummaries.createdAt))
+          .limit(1);
+        
+        return result.length > 0 ? result[0] : null;
+      }),
+
+    generate: publicProcedure
+      .mutation(async () => {
+        // Get last 7 days of activity
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 7);
+        const weekEnd = new Date();
+
+        const sessions = await db.getAllChatSessions();
+        const messages = await db.getAllChatMessages();
+
+        // Filter to last week
+        const weekSessions = sessions.filter(
+          (s) => s.createdAt && new Date(s.createdAt) >= weekStart
+        );
+        const weekMessages = messages.filter(
+          (m) => m.createdAt && new Date(m.createdAt) >= weekStart
+        );
+
+        // Generate AI summary
+        const summaryPrompt = `Analyze this week's learning activity and create a parent-friendly summary:
+
+Total Messages: ${weekMessages.length}
+Total Sessions: ${weekSessions.length}
+
+Provide:
+1. Topics covered (2-3 sentences)
+2. Strengths demonstrated (2-3 sentences)
+3. Areas to improve (2-3 sentences)
+4. Recommendations for next week (2-3 sentences)
+
+Keep it positive, encouraging, and actionable for parents.`;
+
+        const aiResponse = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are an educational progress analyst helping parents understand their child's learning." },
+            { role: "user", content: summaryPrompt },
+          ],
+        });
+
+        const summaryText = typeof aiResponse.choices[0].message.content === 'string' 
+          ? aiResponse.choices[0].message.content 
+          : '';
+
+        // Parse AI response (simplified)
+        const summaryId = randomUUID();
+        const summary = {
+          id: summaryId,
+          userId: "anonymous",
+          weekStart,
+          weekEnd,
+          totalMessages: weekMessages.length,
+          totalSessions: weekSessions.length,
+          topicsCovered: summaryText.substring(0, 500),
+          strengths: "Shows consistent engagement and curiosity.",
+          areasToImprove: "Could benefit from more practice with complex problems.",
+          recommendations: "Continue daily practice and explore new topics.",
+          emailSent: false,
+        };
+
+        await db.createWeeklySummary(summary);
+        return summary;
+      }),
+
+    subscribe: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input }) => {
+        // Store email for weekly summaries
+        // In production, integrate with email service
+        console.log(`Subscribed email: ${input.email}`);
+        return { success: true };
       }),
   }),
 

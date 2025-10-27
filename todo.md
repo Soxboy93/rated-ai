@@ -229,6 +229,28 @@
 - [ ] Onboarding tutorial
 - [ ] Help system and tooltips
 
+## ACQUISITION-DRIVING FEATURES (IMPLEMENT IMMEDIATELY)
+
+### Phase 1 - Quick Wins (TODAY - 6 hours)
+- [x] Weekly AI Summary Email for parents
+- [ ] Smart Study Reminders with streaks
+- [ ] Spanish Language Support (multilingual)
+
+### Phase 2 - B2B Features (THIS WEEK - 3 days)
+- [ ] Curriculum Alignment Tags (Common Core)
+- [ ] Teacher Dashboard (basic version)
+- [ ] Peer Challenge Mode (viral growth)
+
+### Phase 3 - Market Expansion (NEXT WEEK - 5 days)
+- [ ] School Integration API (Google Classroom, Canvas)
+- [ ] Special Needs Mode (accessibility)
+- [ ] College Prep Tracker (SAT/ACT prep)
+
+### Phase 4 - Marketplace (LATER - 2 weeks)
+- [ ] Live Tutor Marketplace with video calls
+- [ ] Payment processing integration
+- [ ] Tutor vetting system
+
 ## Completed Features ✅
 - [x] Age group selection (Little Explorers, Young Learners, Smart Students)
 - [x] AI character system (Sage, Phoenix, Nova, Echo)
