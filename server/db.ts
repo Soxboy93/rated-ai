@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets } from "../drizzle/schema";
+import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -207,14 +207,76 @@ export async function createVirtualPet(pet: any) {
 
 export async function getUserPet(userId: string) {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) return null;
   const result = await db.select().from(virtualPets).where(eq(virtualPets.userId, userId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function updateVirtualPet(petId: string, updates: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(virtualPets).set(updates).where(eq(virtualPets.id, petId));
+}
+
+
+
+// Report Cards
+export async function createReportCard(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(reportCards).values(data);
+  return data;
+}
+
+export async function getLatestReportCard(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db
+    .select()
+    .from(reportCards)
+    .where(eq(reportCards.userId, userId))
+    .orderBy(desc(reportCards.createdAt))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+// Smart Moments
+export async function createSmartMoment(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(smartMoments).values(data);
+  return data;
+}
+
+export async function getSmartMoments(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db
+    .select()
+    .from(smartMoments)
+    .where(eq(smartMoments.userId, userId))
+    .orderBy(desc(smartMoments.createdAt));
+}
+
+// Progress Metrics
+export async function createProgressMetric(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(progressMetrics).values(data);
+  return data;
+}
+
+export async function getProgressMetrics(userId: string, days: number = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db
+    .select()
+    .from(progressMetrics)
+    .where(eq(progressMetrics.userId, userId))
+    .orderBy(desc(progressMetrics.date));
 }
 

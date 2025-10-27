@@ -290,3 +290,62 @@ export const userQuests = mysqlTable("userQuests", {
 export type UserQuest = typeof userQuests.$inferSelect;
 export type InsertUserQuest = typeof userQuests.$inferInsert;
 
+
+
+// Report Cards - AI-generated progress reports
+export const reportCards = mysqlTable("reportCards", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  childName: varchar("childName", { length: 255 }),
+  periodStart: timestamp("periodStart"),
+  periodEnd: timestamp("periodEnd"),
+  overallGrade: varchar("overallGrade", { length: 10 }),
+  mathGrade: varchar("mathGrade", { length: 10 }),
+  scienceGrade: varchar("scienceGrade", { length: 10 }),
+  englishGrade: varchar("englishGrade", { length: 10 }),
+  historyGrade: varchar("historyGrade", { length: 10 }),
+  strengths: text("strengths"),
+  weaknesses: text("weaknesses"),
+  recommendations: text("recommendations"),
+  totalMessages: int("totalMessages"),
+  totalSessions: int("totalSessions"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type ReportCard = typeof reportCards.$inferSelect;
+export type InsertReportCard = typeof reportCards.$inferInsert;
+
+// Smart Moments - "Caught Being Smart" feature
+export const smartMoments = mysqlTable("smartMoments", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  childName: varchar("childName", { length: 255 }),
+  question: text("question"),
+  aiResponse: text("aiResponse"),
+  category: varchar("category", { length: 100 }),
+  parentNotified: boolean("parentNotified").default(false),
+  parentReply: text("parentReply"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type SmartMoment = typeof smartMoments.$inferSelect;
+export type InsertSmartMoment = typeof smartMoments.$inferInsert;
+
+// Progress Metrics - Daily/weekly progress tracking
+export const progressMetrics = mysqlTable("progressMetrics", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  date: timestamp("date").defaultNow(),
+  mathScore: int("mathScore"),
+  scienceScore: int("scienceScore"),
+  englishScore: int("englishScore"),
+  historyScore: int("historyScore"),
+  readingLevel: varchar("readingLevel", { length: 50 }),
+  totalMessages: int("totalMessages"),
+  totalMinutes: int("totalMinutes"),
+  achievementsEarned: int("achievementsEarned"),
+});
+
+export type ProgressMetric = typeof progressMetrics.$inferSelect;
+export type InsertProgressMetric = typeof progressMetrics.$inferInsert;
+
