@@ -111,6 +111,26 @@ export default function EnhancedChat() {
           </div>
         </header>
 
+        {/* Hero Banner */}
+        <div className="relative overflow-hidden mb-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 to-pink-600/20 z-10"></div>
+          <img 
+            src="/hero-banner.png" 
+            alt="Rated AI - Kids Learning with AI" 
+            className="w-full h-64 md:h-96 object-cover"
+          />
+          <div className="absolute inset-0 z-20 flex items-center justify-center">
+            <div className="text-center text-white drop-shadow-2xl">
+              <h1 className="text-5xl md:text-7xl font-black mb-4 animate-pulse">
+                Welcome to Rated AI!
+              </h1>
+              <p className="text-xl md:text-3xl font-semibold">
+                Your AI Learning Adventure Starts Here ✨
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="container mx-auto px-4 py-12 max-w-6xl">
           <div className="text-center mb-12">
             <div className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-full text-sm font-semibold mb-4">
@@ -203,20 +223,30 @@ export default function EnhancedChat() {
               <Card
                 key={char.id}
                 onClick={() => handleCharacterSelect(char.id)}
-                className={`p-6 cursor-pointer hover:shadow-2xl transition-all duration-300 ${
+                className={`p-6 cursor-pointer hover:shadow-2xl hover:scale-105 transition-all duration-300 ${
                   selectedCharacter === char.id
-                    ? "border-4 border-purple-500 bg-purple-50"
-                    : "border-2 border-transparent hover:border-purple-300"
+                    ? "border-4 border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 shadow-2xl scale-105"
+                    : "border-2 border-gray-200 hover:border-purple-300"
                 }`}
               >
-                <div className="flex items-start gap-4">
-                  <div className="text-5xl">{char.emoji}</div>
+                <div className="flex flex-col items-center text-center gap-4">
+                  <div className="w-48 h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center shadow-lg">
+                    <img 
+                      src={`/character-${char.id}.png`} 
+                      alt={char.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement!.innerHTML = `<div class="text-6xl">${char.emoji}</div>`;
+                      }}
+                    />
+                  </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-gray-800 mb-2">{char.name}</h3>
-                    <p className="text-gray-600 mb-3">{char.description}</p>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-2">{char.name}</h3>
+                    <p className="text-gray-600 mb-3 text-base">{char.description}</p>
                     <p className="text-sm text-gray-500 italic">{char.personality}</p>
                     {selectedCharacter === char.id && (
-                      <div className="mt-3 inline-block bg-purple-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                      <div className="mt-4 inline-block bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg">
                         ✓ Selected
                       </div>
                     )}
