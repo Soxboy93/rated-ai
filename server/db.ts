@@ -125,7 +125,7 @@ export async function createChatMessage(message: InsertChatMessage) {
 export async function getSessionMessages(sessionId: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId));
+  return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.createdAt);
 }
 
 export async function getAllUserMessages(userId: string) {

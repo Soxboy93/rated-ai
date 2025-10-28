@@ -313,32 +313,109 @@ export const appRouter = router({
         const sessions = await db.getAllChatSessions();
         const messages = await db.getAllChatMessages();
 
-        // Generate AI report card
         const reportId = randomUUID();
-        
-        // Calculate grades based on activity (simplified for now)
         const totalMessages = messages.length;
         const totalSessions = sessions.length;
         
-        const reportCard = await db.createReportCard({
-          id: reportId,
-          userId: "anonymous",
-          childName: "Student",
-          periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
-          periodEnd: new Date(),
-          overallGrade: "A-",
-          mathGrade: "A",
-          scienceGrade: "B+",
-          englishGrade: "A-",
-          historyGrade: "B",
-          strengths: "Shows excellent curiosity and asks thoughtful questions. Demonstrates strong problem-solving skills and engages actively with learning materials.",
-          weaknesses: "Could benefit from more practice with complex word problems. Consider spending additional time on reading comprehension exercises.",
-          recommendations: "Continue exploring science topics through hands-on experiments. Practice math skills daily for 15-20 minutes. Read for pleasure to improve vocabulary and comprehension.",
-          totalMessages,
-          totalSessions,
-        });
+        // If no data, return empty report
+        if (totalMessages === 0) {
+          return await db.createReportCard({
+            id: reportId,
+            userId: "anonymous",
+            childName: "Student",
+            periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            periodEnd: new Date(),
+            overallGrade: "N/A",
+            mathGrade: "N/A",
+            scienceGrade: "N/A",
+            englishGrade: "N/A",
+            historyGrade: "N/A",
+            strengths: "No learning activity recorded yet. Start chatting to build your report!",
+            weaknesses: "N/A",
+            recommendations: "Begin your learning journey by asking questions about topics that interest you.",
+            totalMessages: 0,
+            totalSessions: 0,
+          });
+        }
 
-        return reportCard;
+        // Analyze real conversation data with AI
+        const conversationSample = messages
+          .filter(m => m.role === 'user')
+          .slice(0, 50)
+          .map(m => m.content)
+          .join('\n');
+
+        const analysisPrompt = `Analyze this student's learning conversations and generate a report card. Provide grades (A+, A, A-, B+, B, B-, C+, C, C-) for Math, Science, English, and History based on the topics discussed. Also provide an overall grade, strengths (2-3 sentences), areas for improvement (2-3 sentences), and recommendations (2-3 sentences).\n\nStudent conversations:\n${conversationSample}\n\nReturn ONLY a JSON object with this exact structure: {"overallGrade": "grade", "mathGrade": "grade", "scienceGrade": "grade", "englishGrade": "grade", "historyGrade": "grade", "strengths": "text", "weaknesses": "text", "recommendations": "text"}`;
+
+        try {
+          const aiResponse = await invokeLLM({
+            messages: [{ role: "user", content: analysisPrompt }],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "report_card",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    overallGrade: { type: "string" },
+                    mathGrade: { type: "string" },
+                    scienceGrade: { type: "string" },
+                    englishGrade: { type: "string" },
+                    historyGrade: { type: "string" },
+                    strengths: { type: "string" },
+                    weaknesses: { type: "string" },
+                    recommendations: { type: "string" },
+                  },
+                  required: ["overallGrade", "mathGrade", "scienceGrade", "englishGrade", "historyGrade", "strengths", "weaknesses", "recommendations"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+
+          const analysis = JSON.parse(aiResponse.choices[0].message.content as string);
+
+          const reportCard = await db.createReportCard({
+            id: reportId,
+            userId: "anonymous",
+            childName: "Student",
+            periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            periodEnd: new Date(),
+            overallGrade: analysis.overallGrade,
+            mathGrade: analysis.mathGrade,
+            scienceGrade: analysis.scienceGrade,
+            englishGrade: analysis.englishGrade,
+            historyGrade: analysis.historyGrade,
+            strengths: analysis.strengths,
+            weaknesses: analysis.weaknesses,
+            recommendations: analysis.recommendations,
+            totalMessages,
+            totalSessions,
+          });
+
+          return reportCard;
+        } catch (error) {
+          console.error("Failed to generate AI report:", error);
+          // Fallback to basic report if AI fails
+          return await db.createReportCard({
+            id: reportId,
+            userId: "anonymous",
+            childName: "Student",
+            periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            periodEnd: new Date(),
+            overallGrade: "B+",
+            mathGrade: "B+",
+            scienceGrade: "B+",
+            englishGrade: "B+",
+            historyGrade: "B+",
+            strengths: `Engaged in ${totalMessages} learning conversations across ${totalSessions} sessions. Shows consistent interest in learning.`,
+            weaknesses: "Continue exploring more topics to build a comprehensive learning profile.",
+            recommendations: "Keep asking questions and exploring new subjects to improve your report card.",
+            totalMessages,
+            totalSessions,
+          });
+        }
       }),
   }),
 

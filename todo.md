@@ -274,3 +274,12 @@
 - [x] Generate logo and favicon
 - [x] Improve overall visual design with beautiful AI-generated assets
 
+
+
+
+## Bug Fixes (URGENT)
+- [ ] Fix chat message ordering - new messages appearing at top instead of bottom
+- [ ] Fix report generation to use real user data instead of fake/generated content
+- [ ] Complete debugging of published site
+- [ ] Test all features on published site
+
