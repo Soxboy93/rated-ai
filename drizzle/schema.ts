@@ -445,3 +445,77 @@ export const peerChallenges = mysqlTable("peer_challenges", {
 export type PeerChallenge = typeof peerChallenges.$inferSelect;
 export type InsertPeerChallenge = typeof peerChallenges.$inferInsert;
 
+
+
+// School Integrations
+export const schoolIntegrations = mysqlTable("school_integrations", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  schoolId: varchar("schoolId", { length: 64 }).notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(), // "google_classroom", "canvas", "schoology"
+  apiKey: text("apiKey"),
+  accessToken: text("accessToken"),
+  refreshToken: text("refreshToken"),
+  isActive: int("isActive").default(1),
+  lastSyncAt: timestamp("lastSyncAt"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type SchoolIntegration = typeof schoolIntegrations.$inferSelect;
+export type InsertSchoolIntegration = typeof schoolIntegrations.$inferInsert;
+
+// Accessibility Settings
+export const accessibilitySettings = mysqlTable("accessibility_settings", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  dyslexiaMode: int("dyslexiaMode").default(0), // OpenDyslexic font, increased spacing
+  adhdMode: int("adhdMode").default(0), // Reduced distractions, focus mode
+  autismMode: int("autismMode").default(0), // Predictable patterns, clear structure
+  fontSize: varchar("fontSize", { length: 20 }).default("medium"), // small, medium, large, xlarge
+  highContrast: int("highContrast").default(0),
+  textToSpeech: int("textToSpeech").default(0),
+  reducedMotion: int("reducedMotion").default(0),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
+
+export type AccessibilitySettings = typeof accessibilitySettings.$inferSelect;
+export type InsertAccessibilitySettings = typeof accessibilitySettings.$inferInsert;
+
+// College Prep
+export const collegePrepProgress = mysqlTable("college_prep_progress", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  testType: varchar("testType", { length: 20 }).notNull(), // "SAT", "ACT", "AP"
+  subject: varchar("subject", { length: 50 }), // Math, Reading, Writing, Science
+  currentScore: int("currentScore"),
+  targetScore: int("targetScore"),
+  practiceTests: int("practiceTests").default(0),
+  questionsAnswered: int("questionsAnswered").default(0),
+  correctAnswers: int("correctAnswers").default(0),
+  weakAreas: text("weakAreas"), // JSON array of topics
+  strongAreas: text("strongAreas"), // JSON array of topics
+  lastPracticeAt: timestamp("lastPracticeAt"),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
+
+export type CollegePrepProgress = typeof collegePrepProgress.$inferSelect;
+export type InsertCollegePrepProgress = typeof collegePrepProgress.$inferInsert;
+
+// SAT/ACT Practice Questions
+export const practiceQuestions = mysqlTable("practice_questions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  testType: varchar("testType", { length: 20 }).notNull(),
+  subject: varchar("subject", { length: 50 }).notNull(),
+  difficulty: varchar("difficulty", { length: 20 }), // easy, medium, hard
+  question: text("question").notNull(),
+  options: text("options"), // JSON array
+  correctAnswer: varchar("correctAnswer", { length: 10 }),
+  explanation: text("explanation"),
+  topic: varchar("topic", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type PracticeQuestion = typeof practiceQuestions.$inferSelect;
+export type InsertPracticeQuestion = typeof practiceQuestions.$inferInsert;
+

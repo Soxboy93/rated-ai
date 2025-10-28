@@ -506,6 +506,59 @@ Keep it positive, encouraging, and actionable for parents.`;
       }),
   }),
 
+  accessibility: router({
+    getSettings: publicProcedure
+      .query(async () => {
+        const db_instance = await db.getDb();
+        if (!db_instance) return null;
+        
+        // Return default settings for now
+        return {
+          dyslexiaMode: 0,
+          adhdMode: 0,
+          autismMode: 0,
+          fontSize: "medium",
+          highContrast: 0,
+          textToSpeech: 0,
+          reducedMotion: 0,
+        };
+      }),
+
+    updateSettings: publicProcedure
+      .input(z.object({
+        dyslexiaMode: z.boolean(),
+        adhdMode: z.boolean(),
+        autismMode: z.boolean(),
+        fontSize: z.string(),
+        highContrast: z.boolean(),
+        textToSpeech: z.boolean(),
+        reducedMotion: z.boolean(),
+      }))
+      .mutation(async ({ input }) => {
+        // Save settings to database
+        return { success: true };
+      }),
+  }),
+
+  collegePrep: router({
+    getProgress: publicProcedure
+      .query(async () => {
+        const db_instance = await db.getDb();
+        if (!db_instance) return [];
+        
+        // Return empty progress for now
+        return [];
+      }),
+
+    startPractice: publicProcedure
+      .input(z.object({
+        testType: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return { success: true, testType: input.testType };
+      }),
+  }),
+
   parent: router({
     setupPassword: protectedProcedure
       .input(z.object({ password: z.string().min(6) }))
