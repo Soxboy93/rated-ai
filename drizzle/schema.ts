@@ -383,3 +383,65 @@ export const studyReminders = mysqlTable("study_reminders", {
 export type StudyReminder = typeof studyReminders.$inferSelect;
 export type InsertStudyReminder = typeof studyReminders.$inferInsert;
 
+
+
+// Curriculum Standards - Common Core alignment
+export const curriculumStandards = mysqlTable("curriculum_standards", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  messageId: varchar("messageId", { length: 64 }).notNull(),
+  standardCode: varchar("standardCode", { length: 50 }).notNull(), // e.g., "CCSS.MATH.3.OA.A.1"
+  standardDescription: text("standardDescription"),
+  subject: varchar("subject", { length: 50 }), // Math, Science, English, etc.
+  gradeLevel: varchar("gradeLevel", { length: 20 }), // K, 1-12
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type CurriculumStandard = typeof curriculumStandards.$inferSelect;
+export type InsertCurriculumStandard = typeof curriculumStandards.$inferInsert;
+
+// Teacher Accounts
+export const teachers = mysqlTable("teachers", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  name: text("name"),
+  email: varchar("email", { length: 320 }),
+  school: varchar("school", { length: 200 }),
+  gradeLevel: varchar("gradeLevel", { length: 50 }),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type Teacher = typeof teachers.$inferSelect;
+export type InsertTeacher = typeof teachers.$inferInsert;
+
+// Classroom Management
+export const classrooms = mysqlTable("classrooms", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  teacherId: varchar("teacherId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  gradeLevel: varchar("gradeLevel", { length: 50 }),
+  subject: varchar("subject", { length: 100 }),
+  studentCount: int("studentCount").default(0),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type Classroom = typeof classrooms.$inferSelect;
+export type InsertClassroom = typeof classrooms.$inferInsert;
+
+// Peer Challenges
+export const peerChallenges = mysqlTable("peer_challenges", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  creatorId: varchar("creatorId", { length: 64 }).notNull(),
+  challengerId: varchar("challengerId", { length: 64 }),
+  challengeType: varchar("challengeType", { length: 50 }), // "math_race", "trivia", "spelling"
+  subject: varchar("subject", { length: 50 }),
+  difficulty: varchar("difficulty", { length: 20 }),
+  creatorScore: int("creatorScore").default(0),
+  challengerScore: int("challengerScore").default(0),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, active, completed
+  winnerId: varchar("winnerId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type PeerChallenge = typeof peerChallenges.$inferSelect;
+export type InsertPeerChallenge = typeof peerChallenges.$inferInsert;
+

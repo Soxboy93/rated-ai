@@ -237,9 +237,9 @@
 - [ ] Spanish Language Support (multilingual)
 
 ### Phase 2 - B2B Features (THIS WEEK - 3 days)
-- [ ] Curriculum Alignment Tags (Common Core)
-- [ ] Teacher Dashboard (basic version)
-- [ ] Peer Challenge Mode (viral growth)
+- [x] Curriculum Alignment Tags (Common Core)
+- [x] Teacher Dashboard (basic version)
+- [x] Peer Challenge Mode (viral growth)
 
 ### Phase 3 - Market Expansion (NEXT WEEK - 5 days)
 - [ ] School Integration API (Google Classroom, Canvas)

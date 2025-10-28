@@ -430,6 +430,82 @@ Keep it positive, encouraging, and actionable for parents.`;
       }),
   }),
 
+  challenges: router({
+    getMyChallenges: publicProcedure
+      .query(async () => {
+        const db_instance = await db.getDb();
+        if (!db_instance) return [];
+        
+        const result = await db_instance
+          .select()
+          .from(db.peerChallenges)
+          .orderBy(desc(db.peerChallenges.createdAt));
+        
+        return result;
+      }),
+
+    create: publicProcedure
+      .input(z.object({
+        challengeType: z.string(),
+        subject: z.string(),
+        difficulty: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const challengeId = randomUUID();
+        const challenge = {
+          id: challengeId,
+          creatorId: "user_default",
+          challengerId: null,
+          challengeType: input.challengeType,
+          subject: input.subject,
+          difficulty: input.difficulty,
+          creatorScore: 0,
+          challengerScore: 0,
+          status: "pending",
+          winnerId: null,
+        };
+
+        await db.createPeerChallenge(challenge);
+        return challenge;
+      }),
+  }),
+
+  teacher: router({
+    getClassrooms: publicProcedure
+      .query(async () => {
+        const db_instance = await db.getDb();
+        if (!db_instance) return [];
+        
+        const result = await db_instance
+          .select()
+          .from(db.classrooms)
+          .orderBy(desc(db.classrooms.createdAt));
+        
+        return result;
+      }),
+
+    createClassroom: publicProcedure
+      .input(z.object({ 
+        name: z.string(),
+        gradeLevel: z.string().optional(),
+        subject: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const classroomId = randomUUID();
+        const classroom = {
+          id: classroomId,
+          teacherId: "teacher_default",
+          name: input.name,
+          gradeLevel: input.gradeLevel || null,
+          subject: input.subject || null,
+          studentCount: 0,
+        };
+
+        await db.createClassroom(classroom);
+        return classroom;
+      }),
+  }),
+
   parent: router({
     setupPassword: protectedProcedure
       .input(z.object({ password: z.string().min(6) }))

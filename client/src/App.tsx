@@ -12,6 +12,7 @@ import HomeworkHelper from "./pages/HomeworkHelper";
 import VirtualPet from "./pages/VirtualPet";
 import ReportCard from "./pages/ReportCard";
 import WeeklySummary from "./pages/WeeklySummary";
+import TeacherDashboard from "./pages/TeacherDashboard";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -25,6 +26,7 @@ function Router() {
       <Route path={"/pet"} component={VirtualPet} />
       <Route path={"/report-card"} component={ReportCard} />
       <Route path={"/weekly-summary"} component={WeeklySummary} />
+      <Route path={"/teacher"} component={TeacherDashboard} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

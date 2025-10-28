@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders } from "../drizzle/schema";
+import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -337,4 +337,71 @@ export async function updateStudyStreak(userId: string, streak: number) {
 
 // Export table references for routers
 export { weeklySummaries, studyReminders };
+
+
+
+// Teacher & Classroom Management
+export async function createClassroom(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(classrooms).values(data);
+  return data;
+}
+
+export async function getClassroomsByTeacher(teacherId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db
+    .select()
+    .from(classrooms)
+    .where(eq(classrooms.teacherId, teacherId))
+    .orderBy(desc(classrooms.createdAt));
+  
+  return result;
+}
+
+// Curriculum Standards
+export async function addCurriculumStandard(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(curriculumStandards).values(data);
+  return data;
+}
+
+export async function getStandardsByMessage(messageId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db
+    .select()
+    .from(curriculumStandards)
+    .where(eq(curriculumStandards.messageId, messageId));
+  
+  return result;
+}
+
+// Peer Challenges
+export async function createPeerChallenge(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(peerChallenges).values(data);
+  return data;
+}
+
+export async function getPeerChallenges(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db
+    .select()
+    .from(peerChallenges)
+    .where(eq(peerChallenges.creatorId, userId))
+    .orderBy(desc(peerChallenges.createdAt));
+  
+  return result;
+}
+
+// Export table references
+export { classrooms, curriculumStandards, peerChallenges, teachers };
 
