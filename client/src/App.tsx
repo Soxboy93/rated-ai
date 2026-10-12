@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import EnhancedChat from "./pages/EnhancedChat";
@@ -17,15 +17,22 @@ import AccessibilitySettings from "./pages/AccessibilitySettings";
 import CollegePrep from "./pages/CollegePrep";
 import PeerChallenges from "./pages/PeerChallenges";
 import AuthPage from "./pages/AuthPage";
+import ConsentPage from "./pages/ConsentPage";
+import { trpc } from "@/lib/trpc";
 import { useAuth } from "./_core/hooks/useAuth";
 
 function Router() {
   const { user, loading } = useAuth();
-  if (loading) {
+  const [location] = useLocation();
+  const consent = trpc.consent.status.useQuery(undefined, { enabled: !!user });
+  if (loading || (user && consent.isLoading)) {
     return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>;
   }
   // Every feature stores a child's data, so the whole app requires a parent account.
   if (!user) return <AuthPage />;
+  // Nothing that handles a child's data is reachable until a parent has agreed.
+  // The parent area stays reachable without consent so a parent can still export or delete data.
+  if (!consent.data?.granted && location !== "/parent") return <ConsentPage contactEmail={consent.data?.contactEmail ?? null} />;
   return (
     <Switch>
       <Route path={"/"} component={EnhancedChat} />

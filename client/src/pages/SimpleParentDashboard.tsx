@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lock, ArrowLeft, MessageSquare, Clock, Shield, Users, TrendingUp, Eye, AlertTriangle } from "lucide-react";
 import { useLocation } from "wouter";
+import FamilyPanel from "./FamilyPanel";
 
 export default function SimpleParentDashboard() {
   const [, setLocation] = useLocation();
@@ -293,6 +294,9 @@ export default function SimpleParentDashboard() {
             )}
           </CardContent>
         </Card>
+
+        <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">Family and privacy</h2>
+        <FamilyPanel />
 
         <p className="text-xs text-gray-500 mt-6">
           Safety checks use automated keyword screening plus age-appropriate instructions to the AI. They reduce risk but

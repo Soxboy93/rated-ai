@@ -1,6 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
+import { CONSENT_POINTS, CONSENT_STATEMENT, CONSENT_TITLE, CONSENT_VERSION } from "@shared/consent";
 import { TRPCError } from "@trpc/server";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { z } from "zod";
 import * as db from "./db";
 import {
@@ -19,7 +20,14 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { checkRateLimit } from "./_core/rateLimit";
 import { systemRouter } from "./_core/systemRouter";
-import { parentProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import {
+  consentedParentProcedure,
+  consentedProcedure,
+  parentProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+} from "./_core/trpc";
 import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt } from "./prompts";
 import { SAFE_FALLBACK_REPLY, screenText, screenWithProvider } from "./safety";
 
@@ -45,6 +53,28 @@ async function requireOwnedSession(sessionId: string, userId: string) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Chat session not found" });
   }
   return session;
+}
+
+async function requireOwnedProfile(profileId: string, userId: string) {
+  const profile = await db.getProfile(profileId);
+  if (!profile || profile.userId !== userId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Child profile not found" });
+  }
+  return profile;
+}
+
+const MAX_PROFILES = 6;
+const consentTextHash = () =>
+  createHash("sha256")
+    .update(JSON.stringify({ v: CONSENT_VERSION, t: CONSENT_TITLE, p: CONSENT_POINTS, s: CONSENT_STATEMENT }))
+    .digest("hex");
+
+const childNameSchema = z.string().trim().min(1).max(50);
+function assertNameAllowed(name: string) {
+  // A name field must not be used to store contact details.
+  if (screenText(name).level !== "safe") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Please use just a first name or nickname." });
+  }
 }
 
 /** Reject disallowed child input to the creative tools before it reaches the model. */
@@ -144,27 +174,29 @@ export const appRouter = router({
   }),
 
   chat: router({
-    createSession: protectedProcedure
+    createSession: consentedProcedure
       .input(
         z.object({
-          childName: z.string().trim().max(100).optional(),
+          profileId: z.string().max(64),
           characterId: z.enum(CHARACTER_IDS).optional(),
-          ageGroup: z.enum(AGE_GROUP_IDS).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
         const sessionId = randomUUID();
         await db.createChatSession({
           id: sessionId,
           userId: ctx.user.id,
-          childName: input.childName,
-          characterId: input.characterId,
-          ageGroup: input.ageGroup,
+          profileId: profile.id,
+          childName: profile.childName,
+          // Age group always comes from the parent-managed profile, never from the child's request.
+          ageGroup: profile.ageGroup,
+          characterId: input.characterId ?? profile.selectedCharacter ?? undefined,
         });
         return { sessionId };
       }),
 
-    sendMessage: protectedProcedure
+    sendMessage: consentedProcedure
       .input(
         z.object({
           sessionId: z.string().max(64),
@@ -238,7 +270,7 @@ export const appRouter = router({
   }),
 
   creative: router({
-    generateStory: protectedProcedure
+    generateStory: consentedProcedure
       .input(z.object({ prompt: z.string().trim().min(1).max(500) }))
       .mutation(async ({ ctx, input }) => {
         checkRateLimit(`creative:${ctx.user.id}`, 10, 60 * 1000);
@@ -258,7 +290,7 @@ export const appRouter = router({
         return { content };
       }),
 
-    generateIllustration: protectedProcedure
+    generateIllustration: consentedProcedure
       .input(z.object({ prompt: z.string().trim().min(1).max(500) }))
       .mutation(async ({ ctx, input }) => {
         checkRateLimit(`image:${ctx.user.id}`, 5, 60 * 1000);
@@ -275,7 +307,7 @@ export const appRouter = router({
         }
       }),
 
-    generateAvatar: protectedProcedure
+    generateAvatar: consentedProcedure
       .input(z.object({ childName: z.string().trim().min(1).max(50), style: z.string().trim().min(1).max(50) }))
       .mutation(async ({ ctx, input }) => {
         checkRateLimit(`image:${ctx.user.id}`, 5, 60 * 1000);
@@ -294,7 +326,7 @@ export const appRouter = router({
   }),
 
   homework: router({
-    analyzeHomework: protectedProcedure
+    analyzeHomework: consentedProcedure
       .input(
         z.object({
           imageData: z.string().max(MAX_IMAGE_BASE64_CHARS), // base64 encoded image
@@ -700,6 +732,147 @@ export const appRouter = router({
       .mutation(({ input }) => ({ success: true, testType: input.testType })),
   }),
 
+  consent: router({
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const active = await db.getActiveConsent(ctx.user.id);
+      return {
+        version: CONSENT_VERSION,
+        granted: !!active && active.version === CONSENT_VERSION,
+        grantedVersion: active?.version ?? null,
+        grantedAt: active?.grantedAt ?? null,
+        contactEmail: ENV.privacyContactEmail || null,
+      };
+    }),
+
+    grant: protectedProcedure
+      .input(z.object({ version: z.literal(CONSENT_VERSION), confirmParent: z.literal(true) }))
+      .mutation(async ({ ctx }) => {
+        const active = await db.getActiveConsent(ctx.user.id);
+        if (!active || active.version !== CONSENT_VERSION) {
+          if (active) await db.revokeConsent(ctx.user.id); // supersede consent given for older wording
+          await db.createConsent({
+            id: randomUUID(),
+            userId: ctx.user.id,
+            version: CONSENT_VERSION,
+            textSha256: consentTextHash(),
+          });
+          await db.logAudit(ctx.user.id, "consent_granted", CONSENT_VERSION);
+        }
+        return { success: true };
+      }),
+
+    // Stops all chat and AI features until consent is granted again. Data is kept; delete it separately.
+    withdraw: parentProcedure.mutation(async ({ ctx }) => {
+      await db.revokeConsent(ctx.user.id);
+      await db.logAudit(ctx.user.id, "consent_withdrawn");
+      return { success: true };
+    }),
+  }),
+
+  profiles: router({
+    // Not PIN-locked: the child picks their own profile on the start screen.
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.listProfiles(ctx.user.id);
+      return rows.map(p => ({
+        id: p.id,
+        childName: p.childName,
+        ageGroup: p.ageGroup,
+        selectedCharacter: p.selectedCharacter,
+      }));
+    }),
+
+    create: consentedParentProcedure
+      .input(
+        z.object({
+          childName: childNameSchema,
+          ageGroup: z.enum(AGE_GROUP_IDS),
+          selectedCharacter: z.enum(CHARACTER_IDS).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        assertNameAllowed(input.childName);
+        if ((await db.listProfiles(ctx.user.id)).length >= MAX_PROFILES) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `You can add up to ${MAX_PROFILES} children.` });
+        }
+        const id = randomUUID();
+        await db.createProfile({
+          id,
+          userId: ctx.user.id,
+          childName: input.childName,
+          ageGroup: input.ageGroup,
+          selectedCharacter: input.selectedCharacter,
+        });
+        await db.logAudit(ctx.user.id, "profile_created", input.childName);
+        return { id };
+      }),
+
+    update: consentedParentProcedure
+      .input(
+        z.object({
+          profileId: z.string().max(64),
+          childName: childNameSchema.optional(),
+          ageGroup: z.enum(AGE_GROUP_IDS).optional(),
+          selectedCharacter: z.enum(CHARACTER_IDS).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+        if (input.childName) assertNameAllowed(input.childName);
+        const { profileId: _id, ...updates } = input;
+        await db.updateProfile(profile.id, updates);
+        await db.logAudit(ctx.user.id, "profile_updated", profile.childName);
+        return { success: true };
+      }),
+
+    // Permanently deletes the profile and all of that child's chats.
+    delete: parentProcedure
+      .input(z.object({ profileId: z.string().max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+        await db.deleteProfileData(ctx.user.id, profile.id);
+        await db.logAudit(ctx.user.id, "profile_deleted", profile.childName);
+        return { success: true };
+      }),
+
+    export: parentProcedure
+      .input(z.object({ profileId: z.string().max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+        const chats = await db.getProfileChats(ctx.user.id, profile.id);
+        await db.logAudit(ctx.user.id, "profile_exported", profile.childName);
+        return {
+          exportedAt: new Date().toISOString(),
+          profile: {
+            childName: profile.childName,
+            ageGroup: profile.ageGroup,
+            selectedCharacter: profile.selectedCharacter,
+            createdAt: profile.createdAt,
+          },
+          chats,
+        };
+      }),
+  }),
+
+  account: router({
+    auditLog: parentProcedure.query(({ ctx }) => db.listAuditEvents(ctx.user.id)),
+
+    // Permanently deletes the parent account and everything stored for it. Requires the password again.
+    delete: parentProcedure
+      .input(z.object({ password: z.string().min(1).max(128), confirm: z.literal("DELETE") }))
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`delete-account:${ctx.user.id}`, 5, 15 * 60 * 1000);
+        const user = await db.getUser(ctx.user.id);
+        if (!user?.passwordHash || !(await verifyPassword(input.password, user.passwordHash))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Password is incorrect" });
+        }
+        await db.deleteAllUserData(ctx.user.id);
+        const options = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(COOKIE_NAME, { ...options, maxAge: -1 });
+        ctx.res.clearCookie(UNLOCK_COOKIE_NAME, { ...options, maxAge: -1 });
+        return { success: true };
+      }),
+  }),
+
   parent: router({
     status: protectedProcedure.query(async ({ ctx }) => {
       const settings = await db.getParentalSettings(ctx.user.id);
@@ -719,6 +892,7 @@ export const appRouter = router({
             throw new TRPCError({ code: "FORBIDDEN", message: "Current PIN is incorrect" });
           }
           await db.updateParentalSettings(ctx.user.id, { password: pinHash });
+          await db.logAudit(ctx.user.id, "pin_changed");
         }
         ctx.res.cookie(UNLOCK_COOKIE_NAME, await signUnlock(ctx.user.id), {
           ...getSessionCookieOptions(ctx.req),

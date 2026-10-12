@@ -14,6 +14,8 @@ export default function EnhancedChat() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<"age" | "character" | "chat">("age");
   const [selectedAge, setSelectedAge] = useState<AgeGroupId | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const { data: profiles, isLoading: profilesLoading } = trpc.profiles.list.useQuery();
   const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -34,8 +36,10 @@ export default function EnhancedChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleAgeSelect = (ageId: AgeGroupId) => {
-    setSelectedAge(ageId);
+  const handleProfileSelect = (profile: { id: string; ageGroup: AgeGroupId; selectedCharacter: string | null }) => {
+    setSelectedProfileId(profile.id);
+    setSelectedAge(profile.ageGroup);
+    setSelectedCharacter(profile.selectedCharacter);
     setStep("character");
   };
 
@@ -44,15 +48,11 @@ export default function EnhancedChat() {
   };
 
   const startChat = () => {
-    if (!selectedCharacter || !selectedAge) return;
-    
-    const character = AI_CHARACTERS.find(c => c.id === selectedCharacter);
-    const ageGroup = AGE_GROUPS[selectedAge];
-    
-    createSession.mutate({ 
-      childName: `${ageGroup.name} User`,
-      characterId: selectedCharacter,
-      ageGroup: selectedAge,
+    if (!selectedCharacter || !selectedProfileId) return;
+
+    createSession.mutate({
+      profileId: selectedProfileId,
+      characterId: selectedCharacter as "sage" | "phoenix" | "nova" | "echo",
     }, {
       onSuccess: (data) => {
         setSessionId(data.sessionId);
@@ -149,38 +149,46 @@ export default function EnhancedChat() {
             <div className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-full text-sm font-semibold mb-4">
               ✨ Choose Your Adventure ✨
             </div>
-            <h2 className="text-4xl font-bold text-gray-800 mb-4">How old are you?</h2>
-            <p className="text-xl text-gray-600">
-              Pick your age group to get the perfect AI assistant experience designed just for you!
-            </p>
+            <h2 className="text-4xl font-bold text-gray-800 mb-4">Who is learning today?</h2>
+            <p className="text-xl text-gray-600">Pick your name to start. Your guide will talk the way that suits your age.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {Object.values(AGE_GROUPS).map((age) => (
-              <Card
-                key={age.id}
-                onClick={() => handleAgeSelect(age.id as AgeGroupId)}
-                className="p-8 cursor-pointer hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border-4 border-transparent hover:border-purple-400"
-              >
-                <div className="text-center">
-                  <div className="text-6xl mb-4">{age.icon}</div>
-                  <h3 className="text-2xl font-bold text-gray-800 mb-2">{age.name}</h3>
-                  <p className="text-purple-600 font-semibold mb-4">Ages {age.ageRange}</p>
-                  <ul className="text-left space-y-2 mb-6">
-                    {age.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-gray-600">
-                        <span className="text-purple-500">⭐</span>
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
-                    Start Chatting!
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
+          {profilesLoading ? (
+            <p className="text-center text-gray-500">Loading…</p>
+          ) : !profiles || profiles.length === 0 ? (
+            <Card className="p-8 max-w-xl mx-auto text-center space-y-4">
+              <h3 className="text-2xl font-bold text-gray-800">No child profile yet</h3>
+              <p className="text-gray-600">A parent needs to add a child profile before the chat can start.</p>
+              <Button onClick={() => setLocation("/parent")} className="bg-gradient-to-r from-purple-500 to-pink-500">
+                Open the parent area
+              </Button>
+            </Card>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-6">
+              {profiles.map((profile) => {
+                const age = AGE_GROUPS[profile.ageGroup as AgeGroupId];
+                return (
+                  <Card
+                    key={profile.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleProfileSelect(profile as any)}
+                    onKeyDown={(e) => e.key === "Enter" && handleProfileSelect(profile as any)}
+                    className="p-8 cursor-pointer hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border-4 border-transparent hover:border-purple-400"
+                  >
+                    <div className="text-center">
+                      <div className="text-6xl mb-4">{age.icon}</div>
+                      <h3 className="text-2xl font-bold text-gray-800 mb-2">{profile.childName}</h3>
+                      <p className="text-purple-600 font-semibold mb-4">{age.name} · Ages {age.ageRange}</p>
+                      <Button className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
+                        Start Chatting!
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );

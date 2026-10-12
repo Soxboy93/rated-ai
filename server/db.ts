@@ -1,5 +1,6 @@
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc, inArray, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import * as schema from "../drizzle/schema";
 import { InsertUser, users, accessibilitySettings, InsertAccessibilitySettings, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -93,7 +94,6 @@ export async function getAllUserMessages(userId: string) {
   const sessionIds = sessions.map(s => s.id);
   if (sessionIds.length === 0) return [];
   
-  const { inArray } = await import("drizzle-orm");
   return db.select().from(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
 }
 
@@ -360,4 +360,169 @@ export async function upsertAccessibilitySettings(data: InsertAccessibilitySetti
   if (!db) throw new Error("Database not available");
   const { id: _id, userId: _userId, ...updates } = data;
   await db.insert(accessibilitySettings).values(data).onDuplicateKeyUpdate({ set: { ...updates, updatedAt: new Date() } });
+}
+
+
+// ---------------------------------------------------------------------------
+// Parental consent
+// ---------------------------------------------------------------------------
+export async function getActiveConsent(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(schema.parentalConsents)
+    .where(and(eq(schema.parentalConsents.userId, userId), isNull(schema.parentalConsents.revokedAt)))
+    .orderBy(desc(schema.parentalConsents.grantedAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createConsent(data: schema.InsertParentalConsent) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(schema.parentalConsents).values({ ...data, grantedAt: new Date() });
+}
+
+export async function revokeConsent(userId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(schema.parentalConsents)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(schema.parentalConsents.userId, userId), isNull(schema.parentalConsents.revokedAt)));
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+export async function logAudit(userId: string, action: string, detail?: string) {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(schema.auditEvents).values({
+      id: crypto.randomUUID(),
+      userId,
+      action,
+      detail: detail?.slice(0, 255),
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    // An audit write must never break the action being recorded, but it must not fail silently either.
+    console.error("[Audit] failed to record", action, error);
+  }
+}
+
+export async function listAuditEvents(userId: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(schema.auditEvents)
+    .where(eq(schema.auditEvents.userId, userId))
+    .orderBy(desc(schema.auditEvents.createdAt))
+    .limit(limit);
+}
+
+// ---------------------------------------------------------------------------
+// Child profiles
+// ---------------------------------------------------------------------------
+export async function listProfiles(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(schema.userProfiles)
+    .where(eq(schema.userProfiles.userId, userId))
+    .orderBy(schema.userProfiles.createdAt, schema.userProfiles.childName);
+}
+
+export async function getProfile(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(schema.userProfiles).where(eq(schema.userProfiles.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createProfile(data: schema.InsertUserProfile) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(schema.userProfiles).values(data);
+}
+
+export async function updateProfile(id: string, updates: Partial<schema.InsertUserProfile>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(schema.userProfiles).set(updates).where(eq(schema.userProfiles.id, id));
+}
+
+/** Chats of one child, with their messages, for export. */
+export async function getProfileChats(userId: string, profileId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const sessions = await db
+    .select()
+    .from(chatSessions)
+    .where(and(eq(chatSessions.userId, userId), eq(chatSessions.profileId, profileId)))
+    .orderBy(chatSessions.createdAt);
+  if (sessions.length === 0) return [];
+  const messages = await db
+    .select()
+    .from(chatMessages)
+    .where(inArray(chatMessages.sessionId, sessions.map(s => s.id)))
+    .orderBy(chatMessages.createdAt, chatMessages.role);
+  return sessions.map(session => ({ ...session, messages: messages.filter(m => m.sessionId === session.id) }));
+}
+
+/** Permanently delete one child profile and all of that child's chats. */
+export async function deleteProfileData(userId: string, profileId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async tx => {
+    const sessions = await tx
+      .select({ id: chatSessions.id })
+      .from(chatSessions)
+      .where(and(eq(chatSessions.userId, userId), eq(chatSessions.profileId, profileId)));
+    const ids = sessions.map(s => s.id);
+    if (ids.length > 0) {
+      await tx.delete(chatMessages).where(inArray(chatMessages.sessionId, ids));
+      await tx.delete(chatSessions).where(inArray(chatSessions.id, ids));
+    }
+    await tx.delete(schema.learningProgress).where(eq(schema.learningProgress.profileId, profileId));
+    await tx
+      .delete(schema.userProfiles)
+      .where(and(eq(schema.userProfiles.id, profileId), eq(schema.userProfiles.userId, userId)));
+  });
+}
+
+/** Permanently delete a parent account and every row that belongs to it. */
+export async function deleteAllUserData(userId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async tx => {
+    const sessions = await tx.select({ id: chatSessions.id }).from(chatSessions).where(eq(chatSessions.userId, userId));
+    const sessionIds = sessions.map(s => s.id);
+    if (sessionIds.length > 0) {
+      await tx.delete(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
+    }
+    const profiles = await tx.select({ id: schema.userProfiles.id }).from(schema.userProfiles).where(eq(schema.userProfiles.userId, userId));
+    if (profiles.length > 0) {
+      await tx.delete(schema.learningProgress).where(inArray(schema.learningProgress.profileId, profiles.map(p => p.id)));
+    }
+    await tx.delete(chatSessions).where(eq(chatSessions.userId, userId));
+    // Tables keyed by userId
+    const byUserId = [
+      schema.userProfiles, schema.parentalSettings, schema.homeworkSubmissions, schema.virtualPets,
+      schema.reportCards, schema.weeklySummaries, schema.accessibilitySettings, schema.achievements,
+      schema.storyCreations, schema.moodEntries, schema.readingSessions, schema.learningStreaks,
+      schema.userQuests, schema.smartMoments, schema.progressMetrics, schema.studyReminders,
+      schema.collegePrepProgress, schema.challengeParticipants, schema.parentalConsents, schema.auditEvents,
+    ] as const;
+    for (const table of byUserId) {
+      await tx.delete(table).where(eq((table as any).userId, userId));
+    }
+    await tx.delete(schema.peerChallenges).where(eq(schema.peerChallenges.creatorId, userId));
+    await tx.delete(schema.classrooms).where(eq(schema.classrooms.teacherId, userId));
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 }

@@ -13,6 +13,8 @@ export const ENV = {
   imageModel: process.env.IMAGE_MODEL || "gpt-image-1",
   // Set to "1" to also call the provider's /moderations endpoint (OpenAI-compatible).
   providerModeration: process.env.LLM_MODERATION === "1",
+  // Shown to parents as the privacy contact. Set before launch.
+  privacyContactEmail: process.env.PRIVACY_CONTACT_EMAIL || "",
   // Comma-separated emails that get the "admin" role on registration.
   adminEmails: (process.env.ADMIN_EMAILS || "")
     .split(",")

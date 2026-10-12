@@ -18,6 +18,18 @@ const store = vi.hoisted(() => ({
   getUserHomeworkSubmissions: vi.fn(),
   createReportCard: vi.fn(),
   getLatestReportCard: vi.fn(),
+  getActiveConsent: vi.fn(),
+  createConsent: vi.fn(),
+  revokeConsent: vi.fn(),
+  logAudit: vi.fn(),
+  listAuditEvents: vi.fn(),
+  listProfiles: vi.fn(),
+  getProfile: vi.fn(),
+  createProfile: vi.fn(),
+  updateProfile: vi.fn(),
+  getProfileChats: vi.fn(),
+  deleteProfileData: vi.fn(),
+  deleteAllUserData: vi.fn(),
 }));
 const llm = vi.hoisted(() => ({ invokeLLM: vi.fn() }));
 
@@ -45,6 +57,7 @@ const llmReply = (content: string) => ({ choices: [{ message: { content } }] });
 beforeEach(() => {
   vi.clearAllMocks();
   resetRateLimits();
+  store.getActiveConsent.mockResolvedValue({ id: "c1", userId: "user-a", version: "2026-10-draft-1" });
 });
 
 describe("authentication required", () => {

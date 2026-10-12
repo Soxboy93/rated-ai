@@ -26,6 +26,8 @@ export const chatSessions = mysqlTable("chatSessions", {
   id: varchar("id", { length: 64 }).primaryKey(),
   userId: varchar("userId", { length: 64 }).notNull(),
   childName: varchar("childName", { length: 100 }),
+  // Which child profile this chat belongs to (null for chats created before profiles existed).
+  profileId: varchar("profileId", { length: 64 }),
   characterId: varchar("characterId", { length: 50 }),
   ageGroup: mysqlEnum("ageGroup", ["kids", "tweens", "teens"]),
   createdAt: timestamp("createdAt").defaultNow(),
@@ -523,3 +525,31 @@ export const practiceQuestions = mysqlTable("practice_questions", {
 export type PracticeQuestion = typeof practiceQuestions.$inferSelect;
 export type InsertPracticeQuestion = typeof practiceQuestions.$inferInsert;
 
+
+
+/**
+ * Parental consent records. One active row (revokedAt null) per parent account.
+ * textSha256 is the hash of the exact consent wording shown (see shared/consent.ts).
+ */
+export const parentalConsents = mysqlTable("parental_consents", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  version: varchar("version", { length: 40 }).notNull(),
+  textSha256: varchar("textSha256", { length: 64 }).notNull(),
+  grantedAt: timestamp("grantedAt", { fsp: 3 }).defaultNow(),
+  revokedAt: timestamp("revokedAt", { fsp: 3 }),
+});
+
+export type ParentalConsent = typeof parentalConsents.$inferSelect;
+export type InsertParentalConsent = typeof parentalConsents.$inferInsert;
+
+/** Record of privacy-relevant actions (consent, profiles, exports, deletion) shown to the parent. */
+export const auditEvents = mysqlTable("audit_events", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  action: varchar("action", { length: 60 }).notNull(),
+  detail: varchar("detail", { length: 255 }),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+});
+
+export type AuditEvent = typeof auditEvents.$inferSelect;

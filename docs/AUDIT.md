@@ -120,3 +120,9 @@ Estimates are rough single-engineer days and assume the hosting/LLM decisions in
 - Moderation quality has not been evaluated against a test set; false negatives are expected.
 - A real MySQL run, the drizzle migration against existing data, and browser E2E testing have not been done in this environment.
 - Compliance (COPPA/FERPA/GDPR/SOC 2): no certification or legal review.
+
+## 10. Per-child profiles and consent (second pass)
+
+Added: parental consent gate (versioned, hashed wording, enforced server-side on chat and all AI tools), child profiles (max 6, first name/nickname + age group + favourite guide), chats linked to a profile with the age group taken from the profile, PIN-gated add/edit/delete/export, withdraw consent, delete account (password + PIN), and a privacy audit log. Migration `0011`. 52 automated tests; the full flow was also driven in a real browser against MariaDB with database assertions (consent row, profile link, export content, cascade deletes, zero rows left after account deletion, no orphaned messages).
+
+Not done: see `docs/PRIVACY.md` ("What this is not", "Still to do"). Notably the consent here is **not** COPPA-style verifiable parental consent, there is no retention policy, and homework history, report cards, weekly summaries and the pet are still per account rather than per child.
