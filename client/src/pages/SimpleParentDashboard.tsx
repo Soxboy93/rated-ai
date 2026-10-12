@@ -1,69 +1,75 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Lock, ArrowLeft, MessageSquare, Clock, Shield, Users, TrendingUp, Eye } from "lucide-react";
+import { Lock, ArrowLeft, MessageSquare, Clock, Shield, Users, TrendingUp, Eye, AlertTriangle } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function SimpleParentDashboard() {
   const [, setLocation] = useLocation();
-  const [password, setPassword] = useState("");
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const utils = trpc.useUtils();
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
-  const [storedPassword, setStoredPassword] = useState<string | null>(null);
 
-  // Load password from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("parentPassword");
-    setStoredPassword(saved);
-  }, []);
+  const { data: status, isLoading: statusLoading } = trpc.parent.status.useQuery();
+  const unlocked = !!status?.unlocked;
 
-  const { data: allSessions, refetch: refetchSessions } = trpc.chat.getAllSessionsPublic.useQuery(undefined, {
-    enabled: isUnlocked,
+  const refreshAll = () => utils.parent.invalidate();
+  const unlock = trpc.parent.unlock.useMutation({
+    onSuccess: res => {
+      if (res.valid) {
+        setPin("");
+        setError("");
+        refreshAll();
+      } else {
+        setError("Incorrect PIN. Please try again.");
+      }
+    },
+    onError: e => setError(e.message),
+  });
+  const setupPin = trpc.parent.setPin.useMutation({
+    onSuccess: () => {
+      setPin("");
+      setError("");
+      refreshAll();
+    },
+    onError: e => setError(e.message),
+  });
+  const lock = trpc.parent.lock.useMutation({
+    onSuccess: async () => {
+      await refreshAll();
+      setLocation("/");
+    },
   });
 
-  const { data: allMessages, refetch: refetchMessages } = trpc.chat.getAllMessagesPublic.useQuery(undefined, {
-    enabled: isUnlocked,
-  });
+  const { data: report, refetch } = trpc.parent.getActivityReport.useQuery(undefined, { enabled: unlocked });
 
-  const handleUnlock = () => {
-    if (!password.trim()) {
-      setError("Please enter a password");
-      return;
-    }
+  const sessions = report?.sessions ?? [];
+  const messages = report?.messages ?? [];
+  const flagged = report?.flaggedMessages ?? [];
+  const childMessages = messages.filter(m => m.role === "user");
+  const totalSessions = report?.totalSessions ?? 0;
+  const totalMessages = report?.totalMessages ?? 0;
+  const flaggedBySession = new Map<string, number>();
+  flagged.forEach(m => flaggedBySession.set(m.sessionId, (flaggedBySession.get(m.sessionId) ?? 0) + 1));
 
-    // First time setup
-    if (!storedPassword) {
-      localStorage.setItem("parentPassword", password);
-      setStoredPassword(password);
-      setIsUnlocked(true);
-      setError("");
-      return;
-    }
-
-    // Verify password
-    if (password === storedPassword) {
-      setIsUnlocked(true);
-      setError("");
+  const submit = () => {
+    setError("");
+    if (!status?.hasPin) {
+      if (pin.length < 4) return setError("Choose a PIN of at least 4 characters.");
+      setupPin.mutate({ pin });
     } else {
-      setError("Incorrect password. Please try again.");
+      if (!pin) return setError("Please enter your PIN");
+      unlock.mutate({ pin });
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleUnlock();
-    }
-  };
+  if (statusLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>;
+  }
 
-  // Calculate statistics
-  const totalSessions = allSessions?.length || 0;
-  const totalMessages = allMessages?.length || 0;
-  const userMessages = allMessages?.filter((m: any) => m.role === "user") || [];
-  const recentSessions = allSessions?.slice(0, 10) || [];
-
-  if (!isUnlocked) {
+  if (!unlocked) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-100 via-purple-50 to-blue-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -74,36 +80,36 @@ export default function SimpleParentDashboard() {
             <div>
               <CardTitle className="text-2xl font-bold">Parent Access</CardTitle>
               <CardDescription className="mt-2">
-                {!storedPassword 
-                  ? "Set up your password to protect the dashboard"
-                  : "Enter your password to access the dashboard"}
+                {status?.hasPin
+                  ? "Enter your parent PIN to open the dashboard"
+                  : "Create a parent PIN so your child can't open this area"}
               </CardDescription>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Password</label>
+              <label htmlFor="pin" className="text-sm font-medium">Parent PIN</label>
               <Input
+                id="pin"
                 type="password"
-                placeholder={!storedPassword ? "Create a password" : "Enter your password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={handleKeyPress}
-                className="w-full"
+                inputMode="text"
+                maxLength={64}
+                placeholder={status?.hasPin ? "Enter your PIN" : "Create a PIN (4+ characters)"}
+                value={pin}
+                onChange={e => setPin(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submit()}
+                autoComplete="off"
               />
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              {error && <p className="text-sm text-red-500" role="alert">{error}</p>}
             </div>
             <Button
-              onClick={handleUnlock}
+              onClick={submit}
+              disabled={unlock.isPending || setupPin.isPending}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
             >
-              {!storedPassword ? "Set Password & Continue" : "Unlock Dashboard"}
+              {status?.hasPin ? "Unlock Dashboard" : "Set PIN & Continue"}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => setLocation("/")}
-              className="w-full"
-            >
+            <Button variant="outline" onClick={() => setLocation("/")} className="w-full">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Chat
             </Button>
@@ -123,146 +129,123 @@ export default function SimpleParentDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800">Parental Dashboard</h1>
-              <p className="text-sm text-gray-600">Monitor your child's AI conversations</p>
+              <p className="text-sm text-gray-600">Review your child's AI conversations</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                refetchSessions();
-                refetchMessages();
-              }}
-            >
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsUnlocked(false);
-                setPassword("");
-                setLocation("/");
-              }}
-              className="gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Exit
+            <Button variant="outline" size="sm" onClick={() => refetch()}>Refresh</Button>
+            <Button variant="outline" onClick={() => lock.mutate()} className="gap-2">
+              <Lock className="w-4 h-4" />
+              Lock &amp; Exit
             </Button>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Statistics Cards */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Total Messages
+                <MessageSquare className="w-4 h-4" />Total Messages
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-purple-600">{totalMessages}</div>
-              <p className="text-xs text-gray-500 mt-1">All conversations</p>
-            </CardContent>
+            <CardContent><div className="text-3xl font-bold text-purple-600">{totalMessages}</div></CardContent>
           </Card>
-
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                Chat Sessions
+                <Users className="w-4 h-4" />Chat Sessions
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-blue-600">{totalSessions}</div>
-              <p className="text-xs text-gray-500 mt-1">Total sessions</p>
-            </CardContent>
+            <CardContent><div className="text-3xl font-bold text-blue-600">{totalSessions}</div></CardContent>
           </Card>
-
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                Child Messages
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">{userMessages.length}</div>
-              <p className="text-xs text-gray-500 mt-1">Questions asked</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" />
-                Engagement
+                <TrendingUp className="w-4 h-4" />Avg per Session
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-pink-600">
                 {totalSessions > 0 ? Math.round(totalMessages / totalSessions) : 0}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Avg per session</p>
+            </CardContent>
+          </Card>
+          <Card className={flagged.length > 0 ? "border-amber-400" : undefined}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />Flagged Messages
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-3xl font-bold ${flagged.length > 0 ? "text-amber-600" : "text-green-600"}`}>
+                {flagged.length}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Needs your attention</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Recent Activity */}
+        {flagged.length > 0 && (
+          <Card className="mb-8 border-amber-300 bg-amber-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-amber-900">
+                <AlertTriangle className="w-5 h-5" />Messages worth a conversation
+              </CardTitle>
+              <CardDescription>
+                These messages matched our safety checks. The assistant did not answer them with AI-generated text.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {flagged.map(m => (
+                <div key={m.id} className="p-3 bg-white rounded border border-amber-200">
+                  <p className="text-xs text-gray-500 mb-1">
+                    {m.createdAt ? new Date(m.createdAt).toLocaleString() : ""} · {m.role === "user" ? "Child" : "AI reply (blocked)"} · {m.flagged}
+                  </p>
+                  <p className="text-gray-800 whitespace-pre-wrap">{m.content}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Recent Chat Sessions
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5" />Recent Chat Sessions</CardTitle>
             <CardDescription>Latest conversations with timestamps</CardDescription>
           </CardHeader>
           <CardContent>
-            {recentSessions.length === 0 ? (
+            {sessions.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>No activity yet</p>
-                <p className="text-sm">Chat sessions will appear here</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {recentSessions.map((session: any) => {
-                  const sessionMessages = allMessages?.filter((m: any) => m.sessionId === session.id) || [];
-                  const lastMessage = sessionMessages[sessionMessages.length - 1];
-                  
+                {sessions.slice(0, 10).map(session => {
+                  const count = messages.filter(m => m.sessionId === session.id).length;
+                  const flaggedCount = flaggedBySession.get(session.id) ?? 0;
                   return (
-                    <div
-                      key={session.id}
-                      className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-gray-800">
-                              {session.childName || "Anonymous"}
-                            </span>
-                            <span className="text-xs text-gray-500">•</span>
-                            <span className="text-sm text-gray-600">
-                              {sessionMessages.length} messages
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500">
-                            {session.createdAt ? new Date(session.createdAt).toLocaleString() : 'Unknown time'}
-                          </p>
+                    <div key={session.id} className="p-4 bg-gray-50 rounded-lg flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-gray-800">{session.childName || "Child"}</span>
+                          <span className="text-xs text-gray-500">•</span>
+                          <span className="text-sm text-gray-600">{count} messages</span>
                         </div>
-                        <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                          Safe
-                        </span>
+                        <p className="text-xs text-gray-500">
+                          {session.createdAt ? new Date(session.createdAt).toLocaleString() : "Unknown time"}
+                        </p>
                       </div>
-                      {lastMessage && (
-                        <div className="mt-2 text-sm text-gray-600 bg-white p-2 rounded border border-gray-200">
-                          <span className="font-medium">Last message: </span>
-                          {lastMessage.content.substring(0, 100)}
-                          {lastMessage.content.length > 100 ? "..." : ""}
-                        </div>
+                      {flaggedCount > 0 ? (
+                        <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs rounded-full font-medium">
+                          {flaggedCount} flagged
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                          No flags
+                        </span>
                       )}
                     </div>
                   );
@@ -272,28 +255,24 @@ export default function SimpleParentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Detailed Message Log */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Eye className="w-5 h-5" />
-              Complete Message History
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2"><Eye className="w-5 h-5" />Complete Message History</CardTitle>
             <CardDescription>All conversations between your child and the AI</CardDescription>
           </CardHeader>
           <CardContent>
-            {userMessages.length === 0 ? (
+            {childMessages.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>No messages yet</p>
               </div>
             ) : (
               <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                {allMessages?.map((message: any, index: number) => {
+                {messages.map(message => {
                   const isUser = message.role === "user";
                   return (
                     <div
-                      key={message.id || index}
+                      key={message.id}
                       className={`p-4 rounded-lg ${
                         isUser
                           ? "bg-gradient-to-r from-purple-50 to-pink-50 border-l-4 border-purple-500"
@@ -301,11 +280,9 @@ export default function SimpleParentDashboard() {
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="font-semibold text-sm">
-                          {isUser ? "👶 Child" : "🤖 AI Assistant"}
-                        </span>
+                        <span className="font-semibold text-sm">{isUser ? "👶 Child" : "🤖 AI Assistant"}</span>
                         <span className="text-xs text-gray-500">
-                          {message.createdAt ? new Date(message.createdAt).toLocaleString() : 'Unknown time'}
+                          {message.createdAt ? new Date(message.createdAt).toLocaleString() : "Unknown time"}
                         </span>
                       </div>
                       <p className="text-gray-800 whitespace-pre-wrap">{message.content}</p>
@@ -317,50 +294,11 @@ export default function SimpleParentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Safety Information */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Safety Features Active
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Shield className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Content Filtering</h3>
-                  <p className="text-sm text-gray-600">All AI responses are filtered for age-appropriate content</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Eye className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Full Monitoring</h3>
-                  <p className="text-sm text-gray-600">Every conversation is logged and available for review</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Users className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Age-Appropriate</h3>
-                  <p className="text-sm text-gray-600">Responses tailored to selected age group</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <p className="text-xs text-gray-500 mt-6">
+          Safety checks use automated keyword screening plus age-appropriate instructions to the AI. They reduce risk but
+          cannot catch everything, so we recommend reviewing conversations. Time limits are not enforced yet.
+        </p>
       </div>
     </div>
   );
 }
-

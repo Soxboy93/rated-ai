@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Send, Sparkles, Menu, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { AI_CHARACTERS, AGE_GROUPS } from "@shared/characters";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 type AgeGroupId = "kids" | "tweens" | "teens";
 
@@ -22,6 +23,8 @@ export default function EnhancedChat() {
 
   const createSession = trpc.chat.createSession.useMutation();
   const sendMessage = trpc.chat.sendMessage.useMutation();
+  const [sendError, setSendError] = useState("");
+  const { logout } = useAuth();
   const { data: messages, refetch } = trpc.chat.getMessages.useQuery(
     { sessionId: sessionId || "" },
     { enabled: !!sessionId }
@@ -47,7 +50,9 @@ export default function EnhancedChat() {
     const ageGroup = AGE_GROUPS[selectedAge];
     
     createSession.mutate({ 
-      childName: `${ageGroup.name} User` 
+      childName: `${ageGroup.name} User`,
+      characterId: selectedCharacter,
+      ageGroup: selectedAge,
     }, {
       onSuccess: (data) => {
         setSessionId(data.sessionId);
@@ -61,6 +66,7 @@ export default function EnhancedChat() {
 
     const userMessage = message;
     setMessage("");
+    setSendError("");
     setIsLoading(true);
 
     try {
@@ -71,6 +77,7 @@ export default function EnhancedChat() {
       await refetch();
     } catch (error) {
       console.error("Failed to send message:", error);
+      setSendError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -100,14 +107,20 @@ export default function EnhancedChat() {
                 Rated AI
               </h1>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLocation("/parent")}
-              className="rounded-full"
-            >
-              <Menu className="w-6 h-6" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => logout()}>
+                Sign out
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setLocation("/parent")}
+                className="rounded-full"
+                aria-label="Parent dashboard"
+              >
+                <Menu className="w-6 h-6" />
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -502,12 +515,16 @@ export default function EnhancedChat() {
           </div>
 
           <div className="border-t-2 border-purple-200 bg-white/50 p-4">
+            {sendError && (
+              <p className="text-sm text-red-600 mb-2 text-center" role="alert">{sendError}</p>
+            )}
             <div className="flex gap-3">
               <Input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message here..."
+                maxLength={2000}
                 disabled={isLoading}
                 className="flex-1 rounded-full border-2 border-purple-300 focus:border-purple-500 px-6 py-6 text-base"
               />

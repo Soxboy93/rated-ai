@@ -11,7 +11,7 @@ export default function AccessibilitySettings() {
     dyslexiaMode: false,
     adhdMode: false,
     autismMode: false,
-    fontSize: "medium",
+    fontSize: "medium" as "small" | "medium" | "large" | "xlarge",
     highContrast: false,
     textToSpeech: false,
     reducedMotion: false,
@@ -30,7 +30,7 @@ export default function AccessibilitySettings() {
         dyslexiaMode: !!savedSettings.dyslexiaMode,
         adhdMode: !!savedSettings.adhdMode,
         autismMode: !!savedSettings.autismMode,
-        fontSize: savedSettings.fontSize || "medium",
+        fontSize: (savedSettings.fontSize || "medium") as "small" | "medium" | "large" | "xlarge",
         highContrast: !!savedSettings.highContrast,
         textToSpeech: !!savedSettings.textToSpeech,
         reducedMotion: !!savedSettings.reducedMotion,
@@ -162,7 +162,7 @@ export default function AccessibilitySettings() {
               </div>
             </div>
             <div className="flex gap-2">
-              {["small", "medium", "large", "xlarge"].map((size) => (
+              {(["small", "medium", "large", "xlarge"] as const).map((size) => (
                 <Button
                   key={size}
                   variant={settings.fontSize === size ? "default" : "outline"}

@@ -1,33 +1,18 @@
-import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { ArrowLeft, Mail, TrendingUp, Star, Target } from "lucide-react";
+import { ArrowLeft, TrendingUp, Star, Target } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function WeeklySummary() {
   const [, setLocation] = useLocation();
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
 
   const { data: latestSummary } = trpc.summaries.getLatest.useQuery();
   const generateSummary = trpc.summaries.generate.useMutation();
-  const subscribe = trpc.summaries.subscribe.useMutation({
-    onSuccess: () => {
-      setSubscribed(true);
-    },
-  });
-
+  const utils = trpc.useUtils();
   const handleGenerate = async () => {
     await generateSummary.mutateAsync();
-    window.location.reload();
-  };
-
-  const handleSubscribe = async () => {
-    if (email) {
-      await subscribe.mutateAsync({ email });
-    }
+    await utils.summaries.getLatest.invalidate();
   };
 
   return (
@@ -51,51 +36,11 @@ export default function WeeklySummary() {
       </div>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Subscribe Card */}
-        {!subscribed && (
-          <Card className="p-6 mb-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-            <div className="flex items-start gap-4">
-              <Mail className="w-8 h-8 flex-shrink-0 mt-1" />
-              <div className="flex-1">
-                <h2 className="text-xl font-bold mb-2">
-                  Get Weekly Reports via Email! 📧
-                </h2>
-                <p className="mb-4 opacity-90">
-                  Receive a beautiful summary of your child's learning progress every Sunday morning.
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    type="email"
-                    placeholder="parent@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="bg-white text-gray-900"
-                  />
-                  <Button
-                    onClick={handleSubscribe}
-                    className="bg-white text-purple-600 hover:bg-gray-100"
-                  >
-                    Subscribe
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {subscribed && (
-          <Card className="p-6 mb-6 bg-green-50 border-green-200">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white text-2xl">
-                ✓
-              </div>
-              <div>
-                <h3 className="font-bold text-green-900">Subscribed!</h3>
-                <p className="text-green-700">You'll receive weekly summaries every Sunday at 9 AM.</p>
-              </div>
-            </div>
-          </Card>
-        )}
+        <Card className="p-4 mb-6 bg-purple-50 border-purple-200">
+          <p className="text-sm text-purple-900">
+            📧 Emailed weekly summaries are not available yet. Generate this week's summary below to read it here.
+          </p>
+        </Card>
 
         {/* Generate Button */}
         <div className="text-center mb-8">
@@ -108,6 +53,10 @@ export default function WeeklySummary() {
             {generateSummary.isPending ? "Generating..." : "Generate This Week's Summary"}
           </Button>
         </div>
+
+        {generateSummary.error && (
+          <p className="text-center text-red-600 mb-6" role="alert">{generateSummary.error.message}</p>
+        )}
 
         {/* Latest Summary */}
         {latestSummary && (
@@ -180,7 +129,7 @@ export default function WeeklySummary() {
               {latestSummary.recommendations && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <Mail className="w-5 h-5 text-green-600" />
+                    <Target className="w-5 h-5 text-green-600" />
                     <h3 className="font-bold text-lg">Recommendations for Next Week</h3>
                   </div>
                   <p className="text-gray-700 leading-relaxed">

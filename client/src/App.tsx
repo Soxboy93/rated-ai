@@ -16,9 +16,16 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import AccessibilitySettings from "./pages/AccessibilitySettings";
 import CollegePrep from "./pages/CollegePrep";
 import PeerChallenges from "./pages/PeerChallenges";
+import AuthPage from "./pages/AuthPage";
+import { useAuth } from "./_core/hooks/useAuth";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
+  const { user, loading } = useAuth();
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>;
+  }
+  // Every feature stores a child's data, so the whole app requires a parent account.
+  if (!user) return <AuthPage />;
   return (
     <Switch>
       <Route path={"/"} component={EnhancedChat} />

@@ -8,7 +8,8 @@ import { mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mys
 export const users = mysqlTable("users", {
   id: varchar("id", { length: 64 }).primaryKey(),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
+  email: varchar("email", { length: 320 }).unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow(),
@@ -25,6 +26,8 @@ export const chatSessions = mysqlTable("chatSessions", {
   id: varchar("id", { length: 64 }).primaryKey(),
   userId: varchar("userId", { length: 64 }).notNull(),
   childName: varchar("childName", { length: 100 }),
+  characterId: varchar("characterId", { length: 50 }),
+  ageGroup: mysqlEnum("ageGroup", ["kids", "tweens", "teens"]),
   createdAt: timestamp("createdAt").defaultNow(),
   lastMessageAt: timestamp("lastMessageAt").defaultNow(),
 });
@@ -466,7 +469,7 @@ export type InsertSchoolIntegration = typeof schoolIntegrations.$inferInsert;
 // Accessibility Settings
 export const accessibilitySettings = mysqlTable("accessibility_settings", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  userId: varchar("userId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull().unique(),
   dyslexiaMode: int("dyslexiaMode").default(0), // OpenDyslexic font, increased spacing
   adhdMode: int("adhdMode").default(0), // Reduced distractions, focus mode
   autismMode: int("autismMode").default(0), // Predictable patterns, clear structure

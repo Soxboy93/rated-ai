@@ -1,7 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import { InsertUser, users, accessibilitySettings, InsertAccessibilitySettings, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -18,71 +17,30 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.id) {
-    throw new Error("User ID is required for upsert");
-  }
-
+export async function createUser(user: InsertUser) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
-
-  try {
-    const values: InsertUser = {
-      id: user.id,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role === undefined) {
-      if (user.id === ENV.ownerId) {
-        user.role = 'admin';
-        values.role = 'admin';
-        updateSet.role = 'admin';
-      }
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
+  if (!db) throw new Error("Database not available");
+  await db.insert(users).values(user);
 }
 
 export async function getUser(id: string) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
+  if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function touchUserSignIn(id: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
 }
 
 // Chat Sessions
@@ -103,7 +61,7 @@ export async function getChatSession(id: string) {
 export async function getUserChatSessions(userId: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(chatSessions).where(eq(chatSessions.userId, userId));
+  return db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.createdAt));
 }
 
 export async function updateSessionLastMessage(sessionId: string) {
@@ -139,18 +97,6 @@ export async function getAllUserMessages(userId: string) {
   return db.select().from(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
 }
 
-export async function getAllChatSessions() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(chatSessions).orderBy(desc(chatSessions.createdAt));
-}
-
-export async function getAllChatMessages() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(chatMessages).orderBy(desc(chatMessages.createdAt));
-}
-
 // Parental Settings
 export async function createParentalSettings(settings: InsertParentalSettings) {
   const db = await getDb();
@@ -181,12 +127,6 @@ export async function createHomeworkSubmission(submission: any) {
   if (!db) throw new Error("Database not available");
   await db.insert(homeworkSubmissions).values(submission);
   return submission;
-}
-
-export async function getAllHomeworkSubmissions() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(homeworkSubmissions).orderBy(desc(homeworkSubmissions.createdAt));
 }
 
 export async function getUserHomeworkSubmissions(userId: string) {
@@ -405,3 +345,19 @@ export async function getPeerChallenges(userId: string) {
 // Export table references
 export { classrooms, curriculumStandards, peerChallenges, teachers };
 
+
+
+// Accessibility Settings
+export async function getAccessibilitySettings(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(accessibilitySettings).where(eq(accessibilitySettings.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertAccessibilitySettings(data: InsertAccessibilitySettings) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { id: _id, userId: _userId, ...updates } = data;
+  await db.insert(accessibilitySettings).values(data).onDuplicateKeyUpdate({ set: { ...updates, updatedAt: new Date() } });
+}

@@ -1,188 +1,325 @@
 import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
+import { z } from "zod";
 import * as db from "./db";
-import { desc } from "drizzle-orm";
+import {
+  UNLOCK_COOKIE_NAME,
+  SESSION_TTL_MS,
+  UNLOCK_TTL_MS,
+  hashPassword,
+  isParentUnlocked,
+  signSession,
+  signUnlock,
+  toSessionUser,
+  verifyPassword,
+} from "./_core/auth";
+import { ENV } from "./_core/env";
+import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
-import * as bcrypt from "bcryptjs";
+import { checkRateLimit } from "./_core/rateLimit";
+import { systemRouter } from "./_core/systemRouter";
+import { parentProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt } from "./prompts";
+import { SAFE_FALLBACK_REPLY, screenText, screenWithProvider } from "./safety";
+
+const MAX_CHAT_MESSAGE_CHARS = 2000;
+const MAX_HISTORY_MESSAGES = 20;
+// ~5 MB of image data once base64-encoded
+const MAX_IMAGE_BASE64_CHARS = 7_000_000;
+
+const AI_UNAVAILABLE = "The assistant is unavailable right now. Please try again in a moment.";
+
+const emailSchema = z.string().trim().toLowerCase().email().max(320);
+const pinSchema = z.string().min(4).max(64);
+
+// bcrypt-compares against this when an account doesn't exist so login timing doesn't reveal accounts.
+let dummyHash: Promise<string> | undefined;
+const getDummyHash = () => (dummyHash ??= hashPassword("not-a-real-password"));
+
+const clientIp = (req: { ip?: string }) => req.ip ?? "unknown";
+
+async function requireOwnedSession(sessionId: string, userId: string) {
+  const session = await db.getChatSession(sessionId);
+  if (!session || session.userId !== userId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Chat session not found" });
+  }
+  return session;
+}
+
+/** Reject disallowed child input to the creative tools before it reaches the model. */
+async function assertPromptAllowed(text: string) {
+  const verdict = await screenWithProvider(text);
+  if (verdict.level !== "safe") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: verdict.reply ?? SAFE_FALLBACK_REPLY });
+  }
+}
+
+function parseJson<T>(raw: unknown): T {
+  try {
+    return JSON.parse(String(raw)) as T;
+  } catch {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: AI_UNAVAILABLE });
+  }
+}
+
+async function llm(params: Parameters<typeof invokeLLM>[0]) {
+  try {
+    return await invokeLLM(params);
+  } catch (error) {
+    console.error("[LLM] request failed:", error);
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: AI_UNAVAILABLE });
+  }
+}
+
+const textOf = (response: Awaited<ReturnType<typeof invokeLLM>>) => {
+  const content = response.choices[0]?.message.content;
+  return typeof content === "string" ? content : "";
+};
 
 export const appRouter = router({
   system: systemRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+
+    register: publicProcedure
+      .input(
+        z.object({
+          email: emailSchema,
+          password: z.string().min(8).max(128),
+          name: z.string().trim().max(100).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`register:${clientIp(ctx.req)}`, 10, 60 * 60 * 1000);
+        if (await db.getUserByEmail(input.email)) {
+          throw new TRPCError({ code: "CONFLICT", message: "An account with this email already exists" });
+        }
+        const id = randomUUID();
+        try {
+          await db.createUser({
+            id,
+            email: input.email,
+            name: input.name || null,
+            passwordHash: await hashPassword(input.password),
+            loginMethod: "email",
+            role: ENV.adminEmails.includes(input.email) ? "admin" : "user",
+            lastSignedIn: new Date(),
+          });
+        } catch {
+          throw new TRPCError({ code: "CONFLICT", message: "An account with this email already exists" });
+        }
+        ctx.res.cookie(COOKIE_NAME, await signSession(id), {
+          ...getSessionCookieOptions(ctx.req),
+          maxAge: SESSION_TTL_MS,
+        });
+        const user = await db.getUser(id);
+        return user ? toSessionUser(user) : null;
+      }),
+
+    login: publicProcedure
+      .input(z.object({ email: emailSchema, password: z.string().min(1).max(128) }))
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`login:${clientIp(ctx.req)}:${input.email}`, 10, 15 * 60 * 1000);
+        const user = await db.getUserByEmail(input.email);
+        const valid = await verifyPassword(input.password, user?.passwordHash ?? (await getDummyHash()));
+        if (!user || !user.passwordHash || !valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect email or password" });
+        }
+        await db.touchUserSignIn(user.id);
+        ctx.res.cookie(COOKIE_NAME, await signSession(user.id), {
+          ...getSessionCookieOptions(ctx.req),
+          maxAge: SESSION_TTL_MS,
+        });
+        return toSessionUser(user);
+      }),
+
     logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      const options = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...options, maxAge: -1 });
+      ctx.res.clearCookie(UNLOCK_COOKIE_NAME, { ...options, maxAge: -1 });
+      return { success: true } as const;
     }),
   }),
 
   chat: router({
-    createSession: publicProcedure
-      .input(z.object({ childName: z.string().optional() }))
-      .mutation(async ({ input }) => {
+    createSession: protectedProcedure
+      .input(
+        z.object({
+          childName: z.string().trim().max(100).optional(),
+          characterId: z.enum(CHARACTER_IDS).optional(),
+          ageGroup: z.enum(AGE_GROUP_IDS).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
         const sessionId = randomUUID();
         await db.createChatSession({
           id: sessionId,
-          userId: "anonymous",
+          userId: ctx.user.id,
           childName: input.childName,
+          characterId: input.characterId,
+          ageGroup: input.ageGroup,
         });
         return { sessionId };
       }),
 
-    sendMessage: publicProcedure
-      .input(z.object({
-        sessionId: z.string(),
-        message: z.string(),
-      }))
-      .mutation(async ({ input }) => {
-        const messageId = randomUUID();
-        
-        // Save user message
+    sendMessage: protectedProcedure
+      .input(
+        z.object({
+          sessionId: z.string().max(64),
+          message: z.string().trim().min(1).max(MAX_CHAT_MESSAGE_CHARS),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const session = await requireOwnedSession(input.sessionId, ctx.user.id);
+        checkRateLimit(`chat:${ctx.user.id}`, 20, 60 * 1000);
+
+        const verdict = await screenWithProvider(input.message);
         await db.createChatMessage({
-          id: messageId,
-          sessionId: input.sessionId,
+          id: randomUUID(),
+          sessionId: session.id,
           role: "user",
           content: input.message,
+          flagged: verdict.level,
         });
 
-        // Get conversation history
-        const messages = await db.getSessionMessages(input.sessionId);
-        
-        // Call OpenAI with kid-safe system prompt
-        const response = await invokeLLM({
+        // Flagged input never reaches the model; the child gets a safe canned reply.
+        if (verdict.level !== "safe") {
+          const reply = verdict.reply ?? SAFE_FALLBACK_REPLY;
+          await db.createChatMessage({
+            id: randomUUID(),
+            sessionId: session.id,
+            role: "assistant",
+            content: reply,
+            flagged: "safe",
+          });
+          await db.updateSessionLastMessage(session.id);
+          return { message: reply, flagged: verdict.level };
+        }
+
+        const history = (await db.getSessionMessages(session.id))
+          .filter(m => m.flagged === "safe" || m.flagged === null)
+          .slice(-MAX_HISTORY_MESSAGES);
+
+        const response = await llm({
           messages: [
-            {
-              role: "system",
-              content: "You are a helpful, friendly AI assistant for children. Keep responses age-appropriate, educational, and safe. Never discuss harmful, inappropriate, or adult content. Be encouraging and positive. Keep answers simple and easy to understand."
-            },
-            ...messages.map(m => ({
-              role: m.role as "user" | "assistant" | "system",
-              content: m.content
-            }))
+            { role: "system", content: buildSystemPrompt(session) },
+            ...history.map(m => ({ role: m.role, content: m.content })),
           ],
         });
 
-        const assistantMessage = typeof response.choices[0].message.content === 'string' 
-          ? response.choices[0].message.content 
-          : "I'm sorry, I couldn't understand that.";
-        
-        // Save assistant response
-        const assistantMessageId = randomUUID();
+        let assistantMessage = textOf(response) || "I'm sorry, I couldn't understand that.";
+        let outputFlag: "safe" | "blocked" = "safe";
+        if (screenText(assistantMessage).level === "blocked") {
+          assistantMessage = SAFE_FALLBACK_REPLY;
+          outputFlag = "blocked";
+        }
+
         await db.createChatMessage({
-          id: assistantMessageId,
-          sessionId: input.sessionId,
+          id: randomUUID(),
+          sessionId: session.id,
           role: "assistant",
           content: assistantMessage,
+          flagged: outputFlag,
         });
-
-        // Update session timestamp
-        await db.updateSessionLastMessage(input.sessionId);
-
-        return { message: assistantMessage };
+        await db.updateSessionLastMessage(session.id);
+        return { message: assistantMessage, flagged: "safe" as const };
       }),
 
-    getMessages: publicProcedure
-      .input(z.object({ sessionId: z.string() }))
-      .query(async ({ input }) => {
+    getMessages: protectedProcedure
+      .input(z.object({ sessionId: z.string().max(64) }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedSession(input.sessionId, ctx.user.id);
         return db.getSessionMessages(input.sessionId);
       }),
 
-    getAllSessions: protectedProcedure
-      .query(async ({ ctx }) => {
-        return db.getUserChatSessions(ctx.user.id);
-      }),
-
-    getAllSessionsPublic: publicProcedure
-      .query(async () => {
-        return db.getAllChatSessions();
-      }),
-
-    getAllMessagesPublic: publicProcedure
-      .query(async () => {
-        return db.getAllChatMessages();
-      }),
+    getAllSessions: protectedProcedure.query(({ ctx }) => db.getUserChatSessions(ctx.user.id)),
   }),
 
   creative: router({
-    generateStory: publicProcedure
-      .input(z.object({ prompt: z.string() }))
-      .mutation(async ({ input }) => {
-        const response = await invokeLLM({
+    generateStory: protectedProcedure
+      .input(z.object({ prompt: z.string().trim().min(1).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`creative:${ctx.user.id}`, 10, 60 * 1000);
+        await assertPromptAllowed(input.prompt);
+        const response = await llm({
           messages: [
             {
               role: "system",
-              content: "You are a creative children's story writer. Write engaging, age-appropriate stories that are fun, educational, and inspire imagination. Keep stories between 200-400 words."
+              content:
+                "You are a creative children's story writer. Write engaging, age-appropriate stories that are fun, educational, and inspire imagination. Never include violence, scary or adult content. Keep stories between 200-400 words.",
             },
-            {
-              role: "user",
-              content: `Write a creative children's story about: ${input.prompt}`
-            }
+            { role: "user", content: `Write a creative children's story about: ${input.prompt}` },
           ],
         });
-
-        const content = typeof response.choices[0].message.content === 'string' 
-          ? response.choices[0].message.content 
-          : "Once upon a time...";
-
+        let content = textOf(response) || "Once upon a time...";
+        if (screenText(content).level === "blocked") content = SAFE_FALLBACK_REPLY;
         return { content };
       }),
 
-    generateIllustration: publicProcedure
-      .input(z.object({ prompt: z.string() }))
-      .mutation(async ({ input }) => {
+    generateIllustration: protectedProcedure
+      .input(z.object({ prompt: z.string().trim().min(1).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`image:${ctx.user.id}`, 5, 60 * 1000);
+        await assertPromptAllowed(input.prompt);
         const { generateImage } = await import("./_core/imageGeneration");
-        const result = await generateImage({ prompt: input.prompt });
-        return { imageUrl: result.url };
+        try {
+          const result = await generateImage({
+            prompt: `Child-friendly, colorful storybook illustration (no text, nothing scary): ${input.prompt}`,
+          });
+          return { imageUrl: result.url };
+        } catch (error) {
+          console.error("[Image] generation failed:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not create the picture right now." });
+        }
       }),
 
-    generateAvatar: publicProcedure
-      .input(z.object({ childName: z.string(), style: z.string() }))
-      .mutation(async ({ input }) => {
+    generateAvatar: protectedProcedure
+      .input(z.object({ childName: z.string().trim().min(1).max(50), style: z.string().trim().min(1).max(50) }))
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`image:${ctx.user.id}`, 5, 60 * 1000);
+        await assertPromptAllowed(`${input.childName} ${input.style}`);
         const { generateImage } = await import("./_core/imageGeneration");
-        const prompt = `Cute cartoon avatar for a child named ${input.childName}, ${input.style} style, friendly, colorful, simple design, profile picture`;
-        const result = await generateImage({ prompt });
-        return { avatarUrl: result.url };
+        try {
+          const result = await generateImage({
+            prompt: `Cute cartoon avatar for a child, ${input.style} style, friendly, colorful, simple design, profile picture, no text`,
+          });
+          return { avatarUrl: result.url };
+        } catch (error) {
+          console.error("[Image] generation failed:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not create the picture right now." });
+        }
       }),
   }),
 
   homework: router({
-    analyzeHomework: publicProcedure
-      .input(z.object({
-        imageData: z.string(), // base64 encoded image
-        subject: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const homeworkId = randomUUID();
-        
-        // Call OpenAI with Vision API to analyze the homework
-        const response = await invokeLLM({
+    analyzeHomework: protectedProcedure
+      .input(
+        z.object({
+          imageData: z.string().max(MAX_IMAGE_BASE64_CHARS), // base64 encoded image
+          subject: z.string().trim().max(50).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`homework:${ctx.user.id}`, 10, 60 * 1000);
+        const response = await llm({
           messages: [
             {
               role: "system",
-              content: "You are a helpful homework tutor for students. Analyze the homework problem in the image and provide a clear, step-by-step solution. Break down complex problems into simple steps. Be encouraging and educational. Format your response as JSON with these fields: question (the problem statement), steps (array of solution steps), answer (final answer), explanation (why this solution works), subject (detected subject area), difficulty (easy/medium/hard)."
+              content:
+                "You are a helpful homework tutor for students. Analyze the homework problem in the image and provide a clear, step-by-step solution. Break down complex problems into simple steps. Be encouraging and educational. If the image is not a homework problem, say so in the question field and leave steps empty. Format your response as JSON with these fields: question (the problem statement), steps (array of solution steps), answer (final answer), explanation (why this solution works), subject (detected subject area), difficulty (easy/medium/hard).",
             },
             {
               role: "user",
               content: [
                 {
                   type: "text",
-                  text: `Please analyze this ${input.subject || 'homework'} problem and provide a step-by-step solution.`
+                  text: `Please analyze this ${input.subject || "homework"} problem and provide a step-by-step solution.`,
                 },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:image/jpeg;base64,${input.imageData}`
-                  }
-                }
-              ]
-            }
+                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${input.imageData}` } },
+              ],
+            },
           ],
           response_format: {
             type: "json_schema",
@@ -193,64 +330,57 @@ export const appRouter = router({
                 type: "object",
                 properties: {
                   question: { type: "string", description: "The homework problem statement" },
-                  steps: { 
-                    type: "array", 
-                    items: { type: "string" },
-                    description: "Step-by-step solution" 
-                  },
+                  steps: { type: "array", items: { type: "string" }, description: "Step-by-step solution" },
                   answer: { type: "string", description: "Final answer" },
                   explanation: { type: "string", description: "Why this solution works" },
                   subject: { type: "string", description: "Detected subject area" },
-                  difficulty: { type: "string", description: "Difficulty level" }
+                  difficulty: { type: "string", description: "Difficulty level" },
                 },
                 required: ["question", "steps", "answer", "explanation", "subject", "difficulty"],
-                additionalProperties: false
-              }
-            }
-          }
+                additionalProperties: false,
+              },
+            },
+          },
         });
 
-        const content = typeof response.choices[0].message.content === 'string' 
-          ? JSON.parse(response.choices[0].message.content)
-          : { question: "Unable to analyze", steps: [], answer: "", explanation: "", subject: "unknown", difficulty: "unknown" };
-        
-        // Save to database
+        const content = parseJson<{
+          question: string;
+          steps: string[];
+          answer: string;
+          explanation: string;
+          subject: string;
+          difficulty: string;
+        }>(textOf(response));
+
         await db.createHomeworkSubmission({
-          id: homeworkId,
-          userId: "anonymous",
-          subject: content.subject,
+          id: randomUUID(),
+          userId: ctx.user.id,
+          subject: String(content.subject ?? "").slice(0, 50),
           question: content.question,
           solution: content.answer,
-          steps: JSON.stringify(content.steps),
-          difficulty: content.difficulty,
+          steps: JSON.stringify(content.steps ?? []),
+          difficulty: String(content.difficulty ?? "").slice(0, 20),
           completed: true,
         });
 
         return content;
       }),
 
-    getHomeworkHistory: publicProcedure
-      .query(async () => {
-        return db.getAllHomeworkSubmissions();
-      }),
+    getHomeworkHistory: protectedProcedure.query(({ ctx }) => db.getUserHomeworkSubmissions(ctx.user.id)),
   }),
 
   pet: router({
-    getMyPet: publicProcedure
-      .query(async () => {
-        return db.getUserPet("anonymous");
-      }),
+    getMyPet: protectedProcedure.query(({ ctx }) => db.getUserPet(ctx.user.id)),
 
-    createPet: publicProcedure
-      .input(z.object({
-        type: z.string(),
-        name: z.string(),
-      }))
-      .mutation(async ({ input }) => {
-        const petId = randomUUID();
+    createPet: protectedProcedure
+      .input(z.object({ type: z.string().trim().min(1).max(50), name: z.string().trim().min(1).max(50) }))
+      .mutation(async ({ ctx, input }) => {
+        if (await db.getUserPet(ctx.user.id)) {
+          throw new TRPCError({ code: "CONFLICT", message: "You already have a pet" });
+        }
         await db.createVirtualPet({
-          id: petId,
-          userId: "anonymous",
+          id: randomUUID(),
+          userId: ctx.user.id,
           type: input.type,
           name: input.name,
           level: 1,
@@ -262,276 +392,225 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    feedPet: publicProcedure
-      .mutation(async () => {
-        const pet = await db.getUserPet("anonymous");
-        if (!pet) return { success: false };
-        
-        await db.updateVirtualPet(pet.id, {
-          hunger: Math.max(0, (pet.hunger || 0) - 30),
-          happiness: Math.min(100, (pet.happiness || 100) + 10),
-          lastFed: new Date(),
-        });
-        return { success: true };
-      }),
+    feedPet: protectedProcedure.mutation(async ({ ctx }) => {
+      const pet = await db.getUserPet(ctx.user.id);
+      if (!pet) return { success: false };
+      await db.updateVirtualPet(pet.id, {
+        hunger: Math.max(0, (pet.hunger || 0) - 30),
+        happiness: Math.min(100, (pet.happiness || 100) + 10),
+        lastFed: new Date(),
+      });
+      return { success: true };
+    }),
 
-    playWithPet: publicProcedure
-      .mutation(async () => {
-        const pet = await db.getUserPet("anonymous");
-        if (!pet) return { success: false };
-        
-        const newExperience = (pet.experience || 0) + 20;
-        const newLevel = Math.floor(newExperience / 100) + 1;
-        let evolution = pet.evolution || "baby";
-        
-        if (newLevel >= 10) evolution = "adult";
-        else if (newLevel >= 5) evolution = "teen";
-        else if (newLevel >= 2) evolution = "child";
-        
-        await db.updateVirtualPet(pet.id, {
-          experience: newExperience,
-          level: newLevel,
-          happiness: Math.min(100, (pet.happiness || 100) + 15),
-          hunger: Math.min(100, (pet.hunger || 0) + 5),
-          evolution,
-        });
-        return { success: true };
-      }),
+    playWithPet: protectedProcedure.mutation(async ({ ctx }) => {
+      const pet = await db.getUserPet(ctx.user.id);
+      if (!pet) return { success: false };
+
+      const newExperience = (pet.experience || 0) + 20;
+      const newLevel = Math.floor(newExperience / 100) + 1;
+      let evolution = pet.evolution || "baby";
+      if (newLevel >= 10) evolution = "adult";
+      else if (newLevel >= 5) evolution = "teen";
+      else if (newLevel >= 2) evolution = "child";
+
+      await db.updateVirtualPet(pet.id, {
+        experience: newExperience,
+        level: newLevel,
+        happiness: Math.min(100, (pet.happiness || 100) + 15),
+        hunger: Math.min(100, (pet.hunger || 0) + 5),
+        evolution,
+      });
+      return { success: true };
+    }),
   }),
 
   reports: router({
-    getLatestReport: publicProcedure
-      .query(async () => {
-        // Get the latest report card
-        const report = await db.getLatestReportCard("anonymous");
-        return report;
-      }),
+    getLatestReport: protectedProcedure.query(({ ctx }) => db.getLatestReportCard(ctx.user.id)),
 
-    generateReport: publicProcedure
-      .mutation(async () => {
-        // Get all chat activity
-        const sessions = await db.getAllChatSessions();
-        const messages = await db.getAllChatMessages();
+    generateReport: protectedProcedure.mutation(async ({ ctx }) => {
+      checkRateLimit(`report:${ctx.user.id}`, 3, 60 * 1000);
+      const sessions = await db.getUserChatSessions(ctx.user.id);
+      const messages = await db.getAllUserMessages(ctx.user.id);
+      const base = {
+        id: randomUUID(),
+        userId: ctx.user.id,
+        childName: sessions[0]?.childName || "Student",
+        periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        periodEnd: new Date(),
+        totalMessages: messages.length,
+        totalSessions: sessions.length,
+      };
 
-        const reportId = randomUUID();
-        const totalMessages = messages.length;
-        const totalSessions = sessions.length;
-        
-        // If no data, return empty report
-        if (totalMessages === 0) {
-          return await db.createReportCard({
-            id: reportId,
-            userId: "anonymous",
-            childName: "Student",
-            periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-            periodEnd: new Date(),
-            overallGrade: "N/A",
-            mathGrade: "N/A",
-            scienceGrade: "N/A",
-            englishGrade: "N/A",
-            historyGrade: "N/A",
-            strengths: "No learning activity recorded yet. Start chatting to build your report!",
-            weaknesses: "N/A",
-            recommendations: "Begin your learning journey by asking questions about topics that interest you.",
-            totalMessages: 0,
-            totalSessions: 0,
-          });
-        }
+      if (messages.length === 0) {
+        return db.createReportCard({
+          ...base,
+          overallGrade: "N/A",
+          mathGrade: "N/A",
+          scienceGrade: "N/A",
+          englishGrade: "N/A",
+          historyGrade: "N/A",
+          strengths: "No learning activity recorded yet. Start chatting to build your report!",
+          weaknesses: "N/A",
+          recommendations: "Begin your learning journey by asking questions about topics that interest you.",
+        });
+      }
 
-        // Analyze real conversation data with AI
-        const conversationSample = messages
-          .filter(m => m.role === 'user')
-          .slice(0, 50)
-          .map(m => m.content)
-          .join('\n');
+      const conversationSample = messages
+        .filter(m => m.role === "user" && m.flagged === "safe")
+        .slice(-50)
+        .map(m => m.content.slice(0, 300))
+        .join("\n");
 
-        const analysisPrompt = `Analyze this student's learning conversations and generate a report card. Provide grades (A+, A, A-, B+, B, B-, C+, C, C-) for Math, Science, English, and History based on the topics discussed. Also provide an overall grade, strengths (2-3 sentences), areas for improvement (2-3 sentences), and recommendations (2-3 sentences).\n\nStudent conversations:\n${conversationSample}\n\nReturn ONLY a JSON object with this exact structure: {"overallGrade": "grade", "mathGrade": "grade", "scienceGrade": "grade", "englishGrade": "grade", "historyGrade": "grade", "strengths": "text", "weaknesses": "text", "recommendations": "text"}`;
-
-        try {
-          const aiResponse = await invokeLLM({
-            messages: [{ role: "user", content: analysisPrompt }],
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "report_card",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    overallGrade: { type: "string" },
-                    mathGrade: { type: "string" },
-                    scienceGrade: { type: "string" },
-                    englishGrade: { type: "string" },
-                    historyGrade: { type: "string" },
-                    strengths: { type: "string" },
-                    weaknesses: { type: "string" },
-                    recommendations: { type: "string" },
-                  },
-                  required: ["overallGrade", "mathGrade", "scienceGrade", "englishGrade", "historyGrade", "strengths", "weaknesses", "recommendations"],
-                  additionalProperties: false,
-                },
+      const response = await llm({
+        messages: [
+          {
+            role: "system",
+            content:
+              "You summarise a child's learning conversations for a parent. Grades are rough estimates from topics discussed, not assessments. Use A+ to C- or N/A where there is no evidence for a subject.",
+          },
+          {
+            role: "user",
+            content: `Student messages:\n${conversationSample}\n\nProvide grades for Math, Science, English, History, an overall grade, strengths (2-3 sentences), areas for improvement (2-3 sentences) and recommendations (2-3 sentences).`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "report_card",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                overallGrade: { type: "string" },
+                mathGrade: { type: "string" },
+                scienceGrade: { type: "string" },
+                englishGrade: { type: "string" },
+                historyGrade: { type: "string" },
+                strengths: { type: "string" },
+                weaknesses: { type: "string" },
+                recommendations: { type: "string" },
               },
+              required: [
+                "overallGrade",
+                "mathGrade",
+                "scienceGrade",
+                "englishGrade",
+                "historyGrade",
+                "strengths",
+                "weaknesses",
+                "recommendations",
+              ],
+              additionalProperties: false,
             },
-          });
+          },
+        },
+      });
 
-          const analysis = JSON.parse(aiResponse.choices[0].message.content as string);
-
-          const reportCard = await db.createReportCard({
-            id: reportId,
-            userId: "anonymous",
-            childName: "Student",
-            periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-            periodEnd: new Date(),
-            overallGrade: analysis.overallGrade,
-            mathGrade: analysis.mathGrade,
-            scienceGrade: analysis.scienceGrade,
-            englishGrade: analysis.englishGrade,
-            historyGrade: analysis.historyGrade,
-            strengths: analysis.strengths,
-            weaknesses: analysis.weaknesses,
-            recommendations: analysis.recommendations,
-            totalMessages,
-            totalSessions,
-          });
-
-          return reportCard;
-        } catch (error) {
-          console.error("Failed to generate AI report:", error);
-          // Fallback to basic report if AI fails
-          return await db.createReportCard({
-            id: reportId,
-            userId: "anonymous",
-            childName: "Student",
-            periodStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-            periodEnd: new Date(),
-            overallGrade: "B+",
-            mathGrade: "B+",
-            scienceGrade: "B+",
-            englishGrade: "B+",
-            historyGrade: "B+",
-            strengths: `Engaged in ${totalMessages} learning conversations across ${totalSessions} sessions. Shows consistent interest in learning.`,
-            weaknesses: "Continue exploring more topics to build a comprehensive learning profile.",
-            recommendations: "Keep asking questions and exploring new subjects to improve your report card.",
-            totalMessages,
-            totalSessions,
-          });
-        }
-      }),
+      const analysis = parseJson<Record<string, string>>(textOf(response));
+      // No fabricated fallback: if the model fails, the request fails and nothing is stored.
+      return db.createReportCard({
+        ...base,
+        overallGrade: analysis.overallGrade,
+        mathGrade: analysis.mathGrade,
+        scienceGrade: analysis.scienceGrade,
+        englishGrade: analysis.englishGrade,
+        historyGrade: analysis.historyGrade,
+        strengths: analysis.strengths,
+        weaknesses: analysis.weaknesses,
+        recommendations: analysis.recommendations,
+      });
+    }),
   }),
 
   summaries: router({
-    getLatest: publicProcedure
-      .query(async () => {
-        const db_instance = await db.getDb();
-        if (!db_instance) return null;
-        
-        const result = await db_instance
-          .select()
-          .from(db.weeklySummaries)
-          .orderBy(desc(db.weeklySummaries.createdAt))
-          .limit(1);
-        
-        return result.length > 0 ? result[0] : null;
-      }),
+    getLatest: protectedProcedure.query(({ ctx }) => db.getLatestWeeklySummary(ctx.user.id)),
 
-    generate: publicProcedure
-      .mutation(async () => {
-        // Get last 7 days of activity
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - 7);
-        const weekEnd = new Date();
+    generate: protectedProcedure.mutation(async ({ ctx }) => {
+      checkRateLimit(`summary:${ctx.user.id}`, 3, 60 * 1000);
+      const weekEnd = new Date();
+      const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-        const sessions = await db.getAllChatSessions();
-        const messages = await db.getAllChatMessages();
+      const sessions = (await db.getUserChatSessions(ctx.user.id)).filter(
+        s => s.createdAt && new Date(s.createdAt) >= weekStart
+      );
+      const messages = (await db.getAllUserMessages(ctx.user.id)).filter(
+        m => m.createdAt && new Date(m.createdAt) >= weekStart
+      );
+      const childMessages = messages.filter(m => m.role === "user" && m.flagged === "safe");
+      if (childMessages.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No learning activity in the last 7 days yet." });
+      }
 
-        // Filter to last week
-        const weekSessions = sessions.filter(
-          (s) => s.createdAt && new Date(s.createdAt) >= weekStart
-        );
-        const weekMessages = messages.filter(
-          (m) => m.createdAt && new Date(m.createdAt) >= weekStart
-        );
+      const response = await llm({
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an educational progress analyst writing a short, positive, factual summary for a parent from their child's messages. Only mention things evidenced in the messages.",
+          },
+          {
+            role: "user",
+            content: `Child's messages this week:\n${childMessages
+              .slice(-50)
+              .map(m => m.content.slice(0, 300))
+              .join("\n")}\n\nProvide topics covered, strengths demonstrated, areas to improve, and recommendations for next week (2-3 sentences each).`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "weekly_summary",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                topicsCovered: { type: "string" },
+                strengths: { type: "string" },
+                areasToImprove: { type: "string" },
+                recommendations: { type: "string" },
+              },
+              required: ["topicsCovered", "strengths", "areasToImprove", "recommendations"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
 
-        // Generate AI summary
-        const summaryPrompt = `Analyze this week's learning activity and create a parent-friendly summary:
-
-Total Messages: ${weekMessages.length}
-Total Sessions: ${weekSessions.length}
-
-Provide:
-1. Topics covered (2-3 sentences)
-2. Strengths demonstrated (2-3 sentences)
-3. Areas to improve (2-3 sentences)
-4. Recommendations for next week (2-3 sentences)
-
-Keep it positive, encouraging, and actionable for parents.`;
-
-        const aiResponse = await invokeLLM({
-          messages: [
-            { role: "system", content: "You are an educational progress analyst helping parents understand their child's learning." },
-            { role: "user", content: summaryPrompt },
-          ],
-        });
-
-        const summaryText = typeof aiResponse.choices[0].message.content === 'string' 
-          ? aiResponse.choices[0].message.content 
-          : '';
-
-        // Parse AI response (simplified)
-        const summaryId = randomUUID();
-        const summary = {
-          id: summaryId,
-          userId: "anonymous",
-          weekStart,
-          weekEnd,
-          totalMessages: weekMessages.length,
-          totalSessions: weekSessions.length,
-          topicsCovered: summaryText.substring(0, 500),
-          strengths: "Shows consistent engagement and curiosity.",
-          areasToImprove: "Could benefit from more practice with complex problems.",
-          recommendations: "Continue daily practice and explore new topics.",
-          emailSent: false,
-        };
-
-        await db.createWeeklySummary(summary);
-        return summary;
-      }),
-
-    subscribe: publicProcedure
-      .input(z.object({ email: z.string().email() }))
-      .mutation(async ({ input }) => {
-        // Store email for weekly summaries
-        // In production, integrate with email service
-        console.log(`Subscribed email: ${input.email}`);
-        return { success: true };
-      }),
+      const parsed = parseJson<Record<string, string>>(textOf(response));
+      const summary = {
+        id: randomUUID(),
+        userId: ctx.user.id,
+        weekStart,
+        weekEnd,
+        totalMessages: messages.length,
+        totalSessions: sessions.length,
+        topicsCovered: parsed.topicsCovered,
+        strengths: parsed.strengths,
+        areasToImprove: parsed.areasToImprove,
+        recommendations: parsed.recommendations,
+        emailSent: false,
+      };
+      await db.createWeeklySummary(summary);
+      return summary;
+    }),
   }),
 
   challenges: router({
-    getMyChallenges: publicProcedure
-      .query(async () => {
-        const db_instance = await db.getDb();
-        if (!db_instance) return [];
-        
-        const result = await db_instance
-          .select()
-          .from(db.peerChallenges)
-          .orderBy(desc(db.peerChallenges.createdAt));
-        
-        return result;
-      }),
+    getMyChallenges: protectedProcedure.query(({ ctx }) => db.getPeerChallenges(ctx.user.id)),
 
-    create: publicProcedure
-      .input(z.object({
-        challengeType: z.string(),
-        subject: z.string(),
-        difficulty: z.string(),
-      }))
-      .mutation(async ({ input }) => {
-        const challengeId = randomUUID();
+    create: protectedProcedure
+      .input(
+        z.object({
+          challengeType: z.string().trim().max(50),
+          subject: z.string().trim().max(50),
+          difficulty: z.string().trim().max(20),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
         const challenge = {
-          id: challengeId,
-          creatorId: "user_default",
+          id: randomUUID(),
+          creatorId: ctx.user.id,
           challengerId: null,
           challengeType: input.challengeType,
           subject: input.subject,
@@ -541,163 +620,164 @@ Keep it positive, encouraging, and actionable for parents.`;
           status: "pending",
           winnerId: null,
         };
-
         await db.createPeerChallenge(challenge);
         return challenge;
       }),
   }),
 
   teacher: router({
-    getClassrooms: publicProcedure
-      .query(async () => {
-        const db_instance = await db.getDb();
-        if (!db_instance) return [];
-        
-        const result = await db_instance
-          .select()
-          .from(db.classrooms)
-          .orderBy(desc(db.classrooms.createdAt));
-        
-        return result;
-      }),
+    getClassrooms: protectedProcedure.query(({ ctx }) => db.getClassroomsByTeacher(ctx.user.id)),
 
-    createClassroom: publicProcedure
-      .input(z.object({ 
-        name: z.string(),
-        gradeLevel: z.string().optional(),
-        subject: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const classroomId = randomUUID();
+    createClassroom: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().trim().min(1).max(200),
+          gradeLevel: z.string().trim().max(50).optional(),
+          subject: z.string().trim().max(100).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
         const classroom = {
-          id: classroomId,
-          teacherId: "teacher_default",
+          id: randomUUID(),
+          teacherId: ctx.user.id,
           name: input.name,
           gradeLevel: input.gradeLevel || null,
           subject: input.subject || null,
           studentCount: 0,
         };
-
         await db.createClassroom(classroom);
         return classroom;
       }),
   }),
 
   accessibility: router({
-    getSettings: publicProcedure
-      .query(async () => {
-        const db_instance = await db.getDb();
-        if (!db_instance) return null;
-        
-        // Return default settings for now
-        return {
-          dyslexiaMode: 0,
-          adhdMode: 0,
-          autismMode: 0,
-          fontSize: "medium",
-          highContrast: 0,
-          textToSpeech: 0,
-          reducedMotion: 0,
-        };
-      }),
+    getSettings: protectedProcedure.query(async ({ ctx }) => {
+      const saved = await db.getAccessibilitySettings(ctx.user.id);
+      return {
+        dyslexiaMode: saved?.dyslexiaMode ?? 0,
+        adhdMode: saved?.adhdMode ?? 0,
+        autismMode: saved?.autismMode ?? 0,
+        fontSize: saved?.fontSize ?? "medium",
+        highContrast: saved?.highContrast ?? 0,
+        textToSpeech: saved?.textToSpeech ?? 0,
+        reducedMotion: saved?.reducedMotion ?? 0,
+      };
+    }),
 
-    updateSettings: publicProcedure
-      .input(z.object({
-        dyslexiaMode: z.boolean(),
-        adhdMode: z.boolean(),
-        autismMode: z.boolean(),
-        fontSize: z.string(),
-        highContrast: z.boolean(),
-        textToSpeech: z.boolean(),
-        reducedMotion: z.boolean(),
-      }))
-      .mutation(async ({ input }) => {
-        // Save settings to database
+    updateSettings: protectedProcedure
+      .input(
+        z.object({
+          dyslexiaMode: z.boolean(),
+          adhdMode: z.boolean(),
+          autismMode: z.boolean(),
+          fontSize: z.enum(["small", "medium", "large", "xlarge"]),
+          highContrast: z.boolean(),
+          textToSpeech: z.boolean(),
+          reducedMotion: z.boolean(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertAccessibilitySettings({
+          id: randomUUID(),
+          userId: ctx.user.id,
+          dyslexiaMode: input.dyslexiaMode ? 1 : 0,
+          adhdMode: input.adhdMode ? 1 : 0,
+          autismMode: input.autismMode ? 1 : 0,
+          fontSize: input.fontSize,
+          highContrast: input.highContrast ? 1 : 0,
+          textToSpeech: input.textToSpeech ? 1 : 0,
+          reducedMotion: input.reducedMotion ? 1 : 0,
+        });
         return { success: true };
       }),
   }),
 
+  // Not implemented yet: no practice questions or scoring exist. Kept so the page loads.
   collegePrep: router({
-    getProgress: publicProcedure
-      .query(async () => {
-        const db_instance = await db.getDb();
-        if (!db_instance) return [];
-        
-        // Return empty progress for now
-        return [];
-      }),
-
-    startPractice: publicProcedure
-      .input(z.object({
-        testType: z.string(),
-      }))
-      .mutation(async ({ input }) => {
-        return { success: true, testType: input.testType };
-      }),
+    getProgress: protectedProcedure.query(() => []),
+    startPractice: protectedProcedure
+      .input(z.object({ testType: z.string().max(20) }))
+      .mutation(({ input }) => ({ success: true, testType: input.testType })),
   }),
 
   parent: router({
-    setupPassword: protectedProcedure
-      .input(z.object({ password: z.string().min(6) }))
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const settings = await db.getParentalSettings(ctx.user.id);
+      return { hasPin: !!settings, unlocked: await isParentUnlocked(ctx.req, ctx.user.id) };
+    }),
+
+    setPin: protectedProcedure
+      .input(z.object({ pin: pinSchema, currentPin: pinSchema.optional() }))
       .mutation(async ({ ctx, input }) => {
-        const hashedPassword = await bcrypt.hash(input.password, 10);
-        const settingsId = randomUUID();
-        
-        try {
-          await db.createParentalSettings({
-            id: settingsId,
-            userId: ctx.user.id,
-            password: hashedPassword,
-          });
-          return { success: true };
-        } catch (error) {
-          // Settings might already exist
-          await db.updateParentalSettings(ctx.user.id, {
-            password: hashedPassword,
-          });
-          return { success: true };
+        checkRateLimit(`pin:${ctx.user.id}`, 5, 5 * 60 * 1000);
+        const existing = await db.getParentalSettings(ctx.user.id);
+        const pinHash = await hashPassword(input.pin);
+        if (!existing) {
+          await db.createParentalSettings({ id: randomUUID(), userId: ctx.user.id, password: pinHash });
+        } else {
+          if (!input.currentPin || !(await verifyPassword(input.currentPin, existing.password))) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Current PIN is incorrect" });
+          }
+          await db.updateParentalSettings(ctx.user.id, { password: pinHash });
         }
+        ctx.res.cookie(UNLOCK_COOKIE_NAME, await signUnlock(ctx.user.id), {
+          ...getSessionCookieOptions(ctx.req),
+          maxAge: UNLOCK_TTL_MS,
+        });
+        return { success: true };
       }),
 
-    verifyPassword: protectedProcedure
-      .input(z.object({ password: z.string() }))
+    unlock: protectedProcedure
+      .input(z.object({ pin: pinSchema }))
       .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`pin:${ctx.user.id}`, 5, 5 * 60 * 1000);
         const settings = await db.getParentalSettings(ctx.user.id);
-        if (!settings) {
-          return { valid: false, needsSetup: true };
+        if (!settings) return { valid: false, needsSetup: true };
+        const valid = await verifyPassword(input.pin, settings.password);
+        if (valid) {
+          ctx.res.cookie(UNLOCK_COOKIE_NAME, await signUnlock(ctx.user.id), {
+            ...getSessionCookieOptions(ctx.req),
+            maxAge: UNLOCK_TTL_MS,
+          });
         }
-        
-        const valid = await bcrypt.compare(input.password, settings.password);
         return { valid, needsSetup: false };
       }),
 
-    getSettings: protectedProcedure
-      .query(async ({ ctx }) => {
-        return db.getParentalSettings(ctx.user.id);
-      }),
+    lock: protectedProcedure.mutation(({ ctx }) => {
+      ctx.res.clearCookie(UNLOCK_COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+      return { success: true };
+    }),
 
-    updateSettings: protectedProcedure
-      .input(z.object({
-        dailyLimit: z.string().optional(),
-        allowedHours: z.string().optional(),
-      }))
+    // Never returns the PIN hash.
+    getSettings: parentProcedure.query(async ({ ctx }) => {
+      const settings = await db.getParentalSettings(ctx.user.id);
+      return settings ? { dailyLimit: settings.dailyLimit, allowedHours: settings.allowedHours } : null;
+    }),
+
+    // Stored for the parent's reference; NOT yet enforced when a child chats.
+    updateSettings: parentProcedure
+      .input(
+        z.object({
+          dailyLimit: z.string().regex(/^\d{1,3}$/).optional(),
+          allowedHours: z.string().max(200).optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         await db.updateParentalSettings(ctx.user.id, input);
         return { success: true };
       }),
 
-    getActivityReport: protectedProcedure
-      .query(async ({ ctx }) => {
-        const sessions = await db.getUserChatSessions(ctx.user.id);
-        const allMessages = await db.getAllUserMessages(ctx.user.id);
-        
-        return {
-          sessions,
-          messages: allMessages,
-          totalSessions: sessions.length,
-          totalMessages: allMessages.length,
-        };
-      }),
+    getActivityReport: parentProcedure.query(async ({ ctx }) => {
+      const sessions = await db.getUserChatSessions(ctx.user.id);
+      const messages = await db.getAllUserMessages(ctx.user.id);
+      return {
+        sessions,
+        messages,
+        flaggedMessages: messages.filter(m => m.flagged && m.flagged !== "safe"),
+        totalSessions: sessions.length,
+        totalMessages: messages.length,
+      };
+    }),
   }),
 });
 
