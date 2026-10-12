@@ -43,7 +43,8 @@ export const chatMessages = mysqlTable("chatMessages", {
   sessionId: varchar("sessionId", { length: 64 }).notNull(),
   role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
   content: text("content").notNull(),
-  createdAt: timestamp("createdAt").defaultNow(),
+  // Millisecond precision so a reply never ties with the message it answers.
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
   flagged: mysqlEnum("flagged", ["safe", "review", "blocked"]).default("safe"),
 });
 

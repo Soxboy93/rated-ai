@@ -76,14 +76,14 @@ export async function updateSessionLastMessage(sessionId: string) {
 export async function createChatMessage(message: InsertChatMessage) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(chatMessages).values(message);
+  await db.insert(chatMessages).values({ ...message, createdAt: message.createdAt ?? new Date() });
   return message;
 }
 
 export async function getSessionMessages(sessionId: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.createdAt);
+  return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.createdAt, chatMessages.role); // role breaks same-millisecond ties: user before assistant
 }
 
 export async function getAllUserMessages(userId: string) {

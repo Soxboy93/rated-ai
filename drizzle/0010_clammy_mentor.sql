@@ -1,0 +1,1 @@
+ALTER TABLE `chatMessages` MODIFY COLUMN `createdAt` timestamp(3) DEFAULT (now());

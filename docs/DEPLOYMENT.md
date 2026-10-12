@@ -16,7 +16,7 @@ Copy `.env.example` to `.env` (or set variables in your platform's secret store)
 pnpm install --frozen-lockfile
 pnpm db:push        # drizzle-kit generate + migrate (needs DATABASE_URL)
 ```
-Migration `0009` adds `users.passwordHash`, a unique constraint on `users.email`, `chatSessions.characterId/ageGroup` and a unique constraint on `accessibility_settings.userId`.
+Migrations `0009`–`0010` add `users.passwordHash`, a unique constraint on `users.email`, `chatSessions.characterId/ageGroup` a unique constraint on `accessibility_settings.userId`, and millisecond precision on `chatMessages.createdAt` (so replies sort after the message they answer). Verified: all 11 migrations apply cleanly to an empty MariaDB 10.11.
 Any rows written under the old shared `"anonymous"` user by the previous version belong to nobody; review and delete them (they may contain children's chats) before launch.
 
 ## 4. Build and run
