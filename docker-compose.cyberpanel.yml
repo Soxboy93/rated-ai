@@ -1,0 +1,49 @@
+# For servers that already run a web server on ports 80/443 (e.g. CyberPanel / OpenLiteSpeed).
+# Runs only the app and its database. The app listens on 127.0.0.1:3000 ONLY (not reachable from
+# the internet); the existing web server terminates HTTPS and proxies rated-ai.com to it.
+# Usage: cp .env.example .env, fill it in, then:
+#   docker compose -f docker-compose.cyberpanel.yml up -d --build
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: rated_ai
+      MARIADB_USER: rated
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - ratedai_dbdata:/var/lib/mysql
+    # No published ports: the host's own MariaDB/MySQL (used by CyberPanel) is untouched.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20
+
+  migrate:
+    build: .
+    command: ["npx", "drizzle-kit", "migrate"]
+    environment:
+      DATABASE_URL: mysql://rated:${DB_PASSWORD}@db:3306/rated_ai
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: mysql://rated:${DB_PASSWORD}@db:3306/rated_ai
+      NODE_ENV: production
+      PORT: "3000"
+      # The proxy terminates HTTPS, so mark session cookies Secure regardless of the hop.
+      FORCE_SECURE_COOKIES: "1"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  ratedai_dbdata:

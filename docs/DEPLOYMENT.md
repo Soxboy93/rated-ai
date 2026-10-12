@@ -39,6 +39,50 @@ docker compose up -d --build
 ```
 Caddy obtains the TLS certificate automatically once DNS resolves to the server and ports 80/443 are open. Migrations run before the app starts. This bundle has not been run in the authoring environment (the Docker client was present but no daemon, so images were not built; the compose file was only syntax-checked with `docker compose config`), so expect to debug the first start.
 
+## 5c. Server that already runs CyberPanel / OpenLiteSpeed (keep your other sites)
+Do **not** use `docker-compose.yml` there (its Caddy service wants ports 80/443). Use `docker-compose.cyberpanel.yml`, which publishes the app on `127.0.0.1:3000` only and keeps its own database in a container (no clash with the host's MariaDB).
+
+1. **Back up first**: take a Hostinger VPS snapshot. Docker edits firewall rules and this server hosts other sites.
+2. Install Docker (AlmaLinux 9):
+   ```bash
+   dnf -y install dnf-plugins-core git
+   dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+   dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+   systemctl enable --now docker
+   ```
+3. Clone, configure and start:
+   ```bash
+   git clone https://github.com/Soxboy93/rated-ai /opt/rated-ai && cd /opt/rated-ai
+   git checkout claude/parent-auth-safety-provider-neutral
+   cp .env.example .env
+   echo "JWT_SECRET=$(openssl rand -base64 48)" >> .env
+   echo "DB_PASSWORD=$(openssl rand -hex 16)" >> .env
+   echo "DB_ROOT_PASSWORD=$(openssl rand -hex 16)" >> .env
+   nano .env        # set LLM_API_KEY; remove the empty duplicate JWT_SECRET/DB_* lines
+   docker compose -f docker-compose.cyberpanel.yml up -d --build
+   curl -s localhost:3000/api/trpc/auth.me     # expect {"result":{"data":{"json":null}}}
+   ```
+4. In CyberPanel: **Websites → Create Website** for `rated-ai.com` (add `www` as an alias/child domain if wanted). Point Cloudflare DNS at the server first (DNS-only/grey cloud while issuing the certificate), then **SSL → Issue SSL** for the site.
+5. Proxy to the app. Open the site's **vHost Conf** (Websites → List Websites → Manage → vHost Conf) and add:
+   ```
+   extprocessor ratedai {
+     type                    proxy
+     address                 127.0.0.1:3000
+     maxConns                100
+     pcKeepAliveTimeout      60
+     initTimeout             60
+     retryTimeout            0
+     respBuffer              0
+   }
+   ```
+   Then in **Rewrite Rules** for the site:
+   ```
+   RewriteEngine On
+   RewriteRule ^(.*)$ http://ratedai/$1 [P,L]
+   ```
+   Save, and restart LiteSpeed from CyberPanel if it does not reload by itself. This has not been tested against a real CyberPanel here; syntax follows OpenLiteSpeed's documented proxy extprocessor, so compare with the OpenLiteSpeed docs if it errors.
+6. Visit `https://rated-ai.com`.
+
 ## 6. Known operational limits
 - Rate limiting is in-memory, per process. Run a single instance, or move `server/_core/rateLimit.ts` to a shared store (Redis) before scaling out.
 - Email delivery (weekly summaries, password reset, email verification) is not implemented. There is no password-reset flow yet.
