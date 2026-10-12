@@ -126,3 +126,11 @@ Estimates are rough single-engineer days and assume the hosting/LLM decisions in
 Added: parental consent gate (versioned, hashed wording, enforced server-side on chat and all AI tools), child profiles (max 6, first name/nickname + age group + favourite guide), chats linked to a profile with the age group taken from the profile, PIN-gated add/edit/delete/export, withdraw consent, delete account (password + PIN), and a privacy audit log. Migration `0011`. 52 automated tests; the full flow was also driven in a real browser against MariaDB with database assertions (consent row, profile link, export content, cascade deletes, zero rows left after account deletion, no orphaned messages).
 
 Not done: see `docs/PRIVACY.md` ("What this is not", "Still to do"). Notably the consent here is **not** COPPA-style verifiable parental consent, there is no retention policy, and homework history, report cards, weekly summaries and the pet are still per account rather than per child.
+
+## 11. Redesign and kid-facing features (third pass)
+
+The whole client was rebuilt around a kid-friendly "sticker book" design (see `docs/KIDS_APP.md`): a player picker, a home hub with daily missions, five real mini-games with XP/levels/streaks/badges stored per child, a chat redesign with read-aloud and voice input, story maker, doodle pad, mood check-in with a breathing exercise, trophy room, pet, homework buddy that reveals steps one at a time, accessibility settings that really apply, and a tabbed parent area with real per-child progress. Migration `0012`.
+
+Removed because they did nothing real: peer challenges, college prep, the teacher dashboard and the old achievements page, plus their server routes. They were listed as stubs in section 3. The unused hero banner moved to `design-assets/`; character art was cut out to transparent and shrunk from ~1.8 MB to ~50 KB each.
+
+Verification: 77 unit/API tests; real SQL run against MariaDB; a 34-check scripted browser run. See `docs/KIDS_APP.md` ("How it was checked", "Not done / limits"). Not done: educator review of content, a specialist accessibility audit, real-model evaluation of AI output, per-child scoping of homework/report/summary/pet data.

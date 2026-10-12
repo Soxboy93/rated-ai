@@ -115,6 +115,7 @@ async function progressSnapshot(profileId: string, clientDay?: string) {
     totalPlays: breakdown.reduce((n, g) => n + g.plays, 0),
     recent: recent.map(r => ({ game: r.game, correct: r.correct, total: r.total, xpEarned: r.xpEarned, createdAt: r.createdAt })),
     lastMood: moods[0]?.mood ?? null,
+    lastMoodAt: moods[0]?.createdAt ?? null,
   };
 }
 
@@ -669,60 +670,6 @@ export const appRouter = router({
     }),
   }),
 
-  challenges: router({
-    getMyChallenges: protectedProcedure.query(({ ctx }) => db.getPeerChallenges(ctx.user.id)),
-
-    create: protectedProcedure
-      .input(
-        z.object({
-          challengeType: z.string().trim().max(50),
-          subject: z.string().trim().max(50),
-          difficulty: z.string().trim().max(20),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        const challenge = {
-          id: randomUUID(),
-          creatorId: ctx.user.id,
-          challengerId: null,
-          challengeType: input.challengeType,
-          subject: input.subject,
-          difficulty: input.difficulty,
-          creatorScore: 0,
-          challengerScore: 0,
-          status: "pending",
-          winnerId: null,
-        };
-        await db.createPeerChallenge(challenge);
-        return challenge;
-      }),
-  }),
-
-  teacher: router({
-    getClassrooms: protectedProcedure.query(({ ctx }) => db.getClassroomsByTeacher(ctx.user.id)),
-
-    createClassroom: protectedProcedure
-      .input(
-        z.object({
-          name: z.string().trim().min(1).max(200),
-          gradeLevel: z.string().trim().max(50).optional(),
-          subject: z.string().trim().max(100).optional(),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        const classroom = {
-          id: randomUUID(),
-          teacherId: ctx.user.id,
-          name: input.name,
-          gradeLevel: input.gradeLevel || null,
-          subject: input.subject || null,
-          studentCount: 0,
-        };
-        await db.createClassroom(classroom);
-        return classroom;
-      }),
-  }),
-
   accessibility: router({
     getSettings: protectedProcedure.query(async ({ ctx }) => {
       const saved = await db.getAccessibilitySettings(ctx.user.id);
@@ -763,14 +710,6 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-  }),
-
-  // Not implemented yet: no practice questions or scoring exist. Kept so the page loads.
-  collegePrep: router({
-    getProgress: protectedProcedure.query(() => []),
-    startPractice: protectedProcedure
-      .input(z.object({ testType: z.string().max(20) }))
-      .mutation(({ input }) => ({ success: true, testType: input.testType })),
   }),
 
   progress: router({
