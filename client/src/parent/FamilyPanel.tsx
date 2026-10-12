@@ -63,8 +63,13 @@ function ChildRow({ profile, onChanged }: { profile: { id: string; childName: st
   const [confirming, setConfirming] = useState(false);
   const update = trpc.profiles.update.useMutation({ onSuccess: () => { setEditing(false); onChanged(); } });
   const del = trpc.profiles.delete.useMutation({ onSuccess: onChanged });
+  const [note, setNote] = useState("");
   const exp = trpc.profiles.export.useMutation({
-    onSuccess: data => downloadJson(`rated-ai-${profile.childName.replace(/\W+/g, "-").toLowerCase()}.json`, data),
+    onSuccess: data => {
+      // The embedded preview cannot start downloads; the live app saves a JSON file.
+      if (import.meta.env.VITE_DEMO) setNote("In the live app this downloads a file with the child's profile, chats, scores and badges.");
+      else downloadJson(`rated-ai-${profile.childName.replace(/\W+/g, "-").toLowerCase()}.json`, data);
+    },
   });
   const group = AGE_GROUPS[profile.ageGroup as AgeId];
 
@@ -109,6 +114,7 @@ function ChildRow({ profile, onChanged }: { profile: { id: string; childName: st
           </div>
         </div>
       )}
+      {note && <p className="text-sm text-gray-600" role="status">{note}</p>}
       {(update.error || del.error || exp.error) && (
         <p className="text-sm text-red-600" role="alert">{(update.error || del.error || exp.error)!.message}</p>
       )}

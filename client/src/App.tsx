@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Route, Router as WouterRouter, Switch, useLocation } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AuthPage from "./pages/AuthPage";
@@ -68,13 +69,22 @@ function Router() {
   );
 }
 
+// Preview build: no real URLs inside the embedded page, so navigate in memory and label it clearly.
+const DEMO = !!import.meta.env.VITE_DEMO;
+const demoHook = DEMO ? memoryLocation({ path: "/" }).hook : undefined;
+
 function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          {demoHook ? <WouterRouter hook={demoHook}><Router /></WouterRouter> : <Router />}
+          {DEMO && (
+            <div role="note" style={{ position: "fixed", left: 10, bottom: "calc(10px + env(safe-area-inset-bottom, 0px))", zIndex: 30, pointerEvents: "none", background: "#fff4d6", color: "#6e4300", border: "2px solid #f0cf86", borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>
+              Preview · example data · nothing is saved
+            </div>
+          )}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

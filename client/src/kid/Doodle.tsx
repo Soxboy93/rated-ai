@@ -116,6 +116,8 @@ export default function Doodle() {
   };
 
   const save = () => {
+    // The embedded preview cannot start downloads; the live app saves a real PNG.
+    if (import.meta.env.VITE_DEMO) { setSaved(true); playSound("badge"); return; }
     canvasRef.current!.toBlob(blob => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -180,7 +182,7 @@ export default function Doodle() {
           onPointerCancel={up}
           style={{ width: "100%", height: "auto", aspectRatio: `${W} / ${H}`, border: "3px solid var(--k-ink)", borderRadius: 22, boxShadow: "0 5px 0 var(--k-ink)", touchAction: "none", cursor: tool === "stamp" ? "copy" : "crosshair", background: "#fff" }}
         />
-        <p className="k-muted" style={{ textAlign: "center", fontSize: ".95rem" }}>{saved ? "Saved to your device! Your drawing never leaves it unless you share it." : "Your doodles stay on this device. Press Save to keep one."}</p>
+        <p className="k-muted" style={{ textAlign: "center", fontSize: ".95rem" }}>{saved ? (import.meta.env.VITE_DEMO ? "Saving a PNG to your device works in the live app. Your drawing never leaves your device." : "Saved to your device! Your drawing never leaves it unless you share it.") : "Your doodles stay on this device. Press Save to keep one."}</p>
       </div>
     </KidShell>
   );

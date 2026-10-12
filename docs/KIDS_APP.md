@@ -56,3 +56,6 @@ Large text, easy-read letters (Lexend font with extra spacing), high contrast, c
 - Pet is per account. Homework history, report cards and weekly summaries are still per account, not per child.
 - Daily time limits are stored nowhere yet; not enforced.
 - Voice input and read-aloud depend on the browser and the voices installed on the device.
+
+## The Claude preview
+`node scripts/build-demo.mjs <out.html>` builds the **real client** into one self-contained HTML file wired to an in-browser demo backend (`client/src/demo/mockServer.ts`, `vite.demo.config.ts`). It reuses the real game, XP, streak, badge and safety-screening code. What is not real in the preview: accounts and the database (everything lives in memory and resets on reload), the AI (chat, story and homework replies are canned), picture generation, and file downloads. The preview opens with one example child so the parent area and trophy room are not empty.

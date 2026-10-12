@@ -42,7 +42,9 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      fetch(input, init) {
+      async fetch(input, init) {
+        // Preview build only: answer from the in-browser demo backend instead of the network.
+        if (import.meta.env.VITE_DEMO) return (await import("./demo/mockServer")).demoFetch(input, init);
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
