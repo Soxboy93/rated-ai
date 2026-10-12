@@ -1,6 +1,7 @@
-import { and, eq, desc, inArray, isNull } from "drizzle-orm";
+import { and, eq, desc, gte, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import * as schema from "../drizzle/schema";
+import { BADGES, earnedBadgeIds, levelFromXp, nextStreak, xpForPlay, type GameId, type ProgressStats } from "../shared/gamification";
 import { InsertUser, users, accessibilitySettings, InsertAccessibilitySettings, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -489,6 +490,10 @@ export async function deleteProfileData(userId: string, profileId: string) {
       await tx.delete(chatSessions).where(inArray(chatSessions.id, ids));
     }
     await tx.delete(schema.learningProgress).where(eq(schema.learningProgress.profileId, profileId));
+    await tx.delete(schema.childBadges).where(eq(schema.childBadges.profileId, profileId));
+    await tx.delete(schema.gamePlays).where(eq(schema.gamePlays.profileId, profileId));
+    await tx.delete(schema.moodCheckins).where(eq(schema.moodCheckins.profileId, profileId));
+    await tx.delete(schema.childProgress).where(eq(schema.childProgress.profileId, profileId));
     await tx
       .delete(schema.userProfiles)
       .where(and(eq(schema.userProfiles.id, profileId), eq(schema.userProfiles.userId, userId)));
@@ -517,6 +522,7 @@ export async function deleteAllUserData(userId: string) {
       schema.storyCreations, schema.moodEntries, schema.readingSessions, schema.learningStreaks,
       schema.userQuests, schema.smartMoments, schema.progressMetrics, schema.studyReminders,
       schema.collegePrepProgress, schema.challengeParticipants, schema.parentalConsents, schema.auditEvents,
+      schema.childProgress, schema.gamePlays, schema.childBadges, schema.moodCheckins,
     ] as const;
     for (const table of byUserId) {
       await tx.delete(table).where(eq((table as any).userId, userId));
@@ -526,3 +532,152 @@ export async function deleteAllUserData(userId: string) {
     await tx.delete(users).where(eq(users.id, userId));
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Games, XP, streaks, badges and mood check-ins
+// ---------------------------------------------------------------------------
+type Tx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0];
+
+async function readStats(tx: Tx, profileId: string, progress: { xp: number; streakDays: number; longestStreak: number }): Promise<ProgressStats> {
+  const rows = await tx
+    .select({
+      game: schema.gamePlays.game,
+      plays: sql<string>`COUNT(*)`,
+      perfect: sql<string>`COALESCE(SUM(CASE WHEN ${schema.gamePlays.correct} = ${schema.gamePlays.total} THEN 1 ELSE 0 END), 0)`,
+    })
+    .from(schema.gamePlays)
+    .where(eq(schema.gamePlays.profileId, profileId))
+    .groupBy(schema.gamePlays.game);
+  const [mood] = await tx.select({ n: sql<string>`COUNT(*)` }).from(schema.moodCheckins).where(eq(schema.moodCheckins.profileId, profileId));
+  const playsByGame: Partial<Record<GameId, number>> = {};
+  let totalPlays = 0, perfectPlays = 0;
+  for (const r of rows) {
+    playsByGame[r.game as GameId] = Number(r.plays);
+    totalPlays += Number(r.plays);
+    perfectPlays += Number(r.perfect);
+  }
+  return { ...progress, totalPlays, perfectPlays, playsByGame, moodCheckins: Number(mood?.n ?? 0) };
+}
+
+/** Insert any badges the child now qualifies for; returns the ids that are new. */
+async function awardBadges(tx: Tx, userId: string, profileId: string, stats: ProgressStats): Promise<string[]> {
+  const have = new Set((await tx.select({ id: schema.childBadges.badgeId }).from(schema.childBadges).where(eq(schema.childBadges.profileId, profileId))).map(r => r.id));
+  const fresh = earnedBadgeIds(stats).filter(id => !have.has(id));
+  for (const badgeId of fresh) {
+    await tx.insert(schema.childBadges).values({ id: crypto.randomUUID(), userId, profileId, badgeId, earnedAt: new Date() });
+  }
+  return fresh;
+}
+
+async function lockProgress(tx: Tx, userId: string, profileId: string) {
+  await tx.insert(schema.childProgress).values({ profileId, userId }).onDuplicateKeyUpdate({ set: { profileId } });
+  const [row] = await tx.select().from(schema.childProgress).where(eq(schema.childProgress.profileId, profileId)).for("update");
+  return row;
+}
+
+export async function getChildProgress(profileId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(schema.childProgress).where(eq(schema.childProgress.profileId, profileId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function recordPlay(input: {
+  userId: string; profileId: string; game: GameId; level: number; correct: number; total: number; durationMs: number; day: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const row = await lockProgress(tx, input.userId, input.profileId);
+    const xpEarned = xpForPlay(input.correct, input.total);
+    const before = row.xp;
+    const xp = before + xpEarned;
+    const streakDays = nextStreak(row.lastPlayDate, row.streakDays, input.day);
+    const longestStreak = Math.max(row.longestStreak, streakDays);
+    await tx.insert(schema.gamePlays).values({
+      id: crypto.randomUUID(), userId: input.userId, profileId: input.profileId, game: input.game, level: input.level,
+      correct: input.correct, total: input.total, durationMs: input.durationMs, xpEarned, createdAt: new Date(),
+    });
+    await tx
+      .update(schema.childProgress)
+      .set({ xp, streakDays, longestStreak, lastPlayDate: input.day, updatedAt: new Date() })
+      .where(eq(schema.childProgress.profileId, input.profileId));
+    const stats = await readStats(tx, input.profileId, { xp, streakDays, longestStreak });
+    const newBadges = await awardBadges(tx, input.userId, input.profileId, stats);
+    return { xpEarned, xp, leveledUp: levelFromXp(xp) > levelFromXp(before), streakDays, longestStreak, newBadges };
+  });
+}
+
+export async function addMoodCheckin(input: { userId: string; profileId: string; mood: string; note?: string; flagged: "safe" | "review" | "blocked" }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const row = await lockProgress(tx, input.userId, input.profileId);
+    await tx.insert(schema.moodCheckins).values({
+      id: crypto.randomUUID(), userId: input.userId, profileId: input.profileId, mood: input.mood,
+      note: input.note, flagged: input.flagged, createdAt: new Date(),
+    });
+    const stats = await readStats(tx, input.profileId, row);
+    return { newBadges: await awardBadges(tx, input.userId, input.profileId, stats) };
+  });
+}
+
+export async function countRecentMoodCheckins(profileId: string, since: Date) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [r] = await db
+    .select({ n: sql<string>`COUNT(*)` })
+    .from(schema.moodCheckins)
+    .where(and(eq(schema.moodCheckins.profileId, profileId), gte(schema.moodCheckins.createdAt, since)));
+  return Number(r?.n ?? 0);
+}
+
+export async function listMoodCheckins(profileId: string, limit = 14) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(schema.moodCheckins).where(eq(schema.moodCheckins.profileId, profileId)).orderBy(desc(schema.moodCheckins.createdAt)).limit(limit);
+}
+
+export async function listBadges(profileId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(schema.childBadges).where(eq(schema.childBadges.profileId, profileId)).orderBy(schema.childBadges.earnedAt);
+}
+
+export async function getRecentPlays(profileId: string, limit = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(schema.gamePlays).where(eq(schema.gamePlays.profileId, profileId)).orderBy(desc(schema.gamePlays.createdAt)).limit(limit);
+}
+
+/** Plays, perfect rounds and accuracy per game, for the parent overview and the trophy room. */
+export async function getGameBreakdown(profileId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      game: schema.gamePlays.game,
+      plays: sql<string>`COUNT(*)`,
+      correct: sql<string>`SUM(${schema.gamePlays.correct})`,
+      total: sql<string>`SUM(${schema.gamePlays.total})`,
+    })
+    .from(schema.gamePlays)
+    .where(eq(schema.gamePlays.profileId, profileId))
+    .groupBy(schema.gamePlays.game);
+  return rows.map(r => ({ game: r.game as GameId, plays: Number(r.plays), correct: Number(r.correct), total: Number(r.total) }));
+}
+
+export async function getProfileProgressExport(profileId: string) {
+  const db = await getDb();
+  if (!db) return { progress: null, plays: [], badges: [], moods: [] };
+  const [progress, plays, badges, moods] = await Promise.all([
+    getChildProgress(profileId),
+    db.select().from(schema.gamePlays).where(eq(schema.gamePlays.profileId, profileId)).orderBy(schema.gamePlays.createdAt),
+    listBadges(profileId),
+    db.select().from(schema.moodCheckins).where(eq(schema.moodCheckins.profileId, profileId)).orderBy(schema.moodCheckins.createdAt),
+  ]);
+  return { progress, plays, badges, moods };
+}
+
+export { BADGES };

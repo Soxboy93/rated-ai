@@ -1,4 +1,15 @@
 import { COOKIE_NAME } from "@shared/const";
+import {
+  GAME_IDS,
+  MAX_QUESTIONS_PER_PLAY,
+  MIN_MS_PER_QUESTION,
+  MOODS,
+  badgeById,
+  effectiveStreak,
+  levelProgress,
+  levelTitle,
+  resolvePlayDay,
+} from "@shared/gamification";
 import { CONSENT_POINTS, CONSENT_STATEMENT, CONSENT_TITLE, CONSENT_VERSION } from "@shared/consent";
 import { TRPCError } from "@trpc/server";
 import { createHash, randomUUID } from "crypto";
@@ -75,6 +86,36 @@ function assertNameAllowed(name: string) {
   if (screenText(name).level !== "safe") {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Please use just a first name or nickname." });
   }
+}
+
+/** Everything the kid UI needs to draw a child's progress. */
+async function progressSnapshot(profileId: string, clientDay?: string) {
+  const today = resolvePlayDay(clientDay, new Date());
+  const [row, badges, breakdown, recent, moods] = await Promise.all([
+    db.getChildProgress(profileId),
+    db.listBadges(profileId),
+    db.getGameBreakdown(profileId),
+    db.getRecentPlays(profileId, 8),
+    db.listMoodCheckins(profileId, 1),
+  ]);
+  const xp = row?.xp ?? 0;
+  const lp = levelProgress(xp);
+  return {
+    xp,
+    level: lp.level,
+    title: levelTitle(lp.level),
+    levelStart: lp.start,
+    levelNext: lp.next,
+    levelFraction: lp.fraction,
+    streakDays: effectiveStreak(row?.lastPlayDate ?? null, row?.streakDays ?? 0, today),
+    longestStreak: row?.longestStreak ?? 0,
+    playedToday: row?.lastPlayDate === today,
+    badges: badges.map(b => ({ badgeId: b.badgeId, earnedAt: b.earnedAt })),
+    breakdown,
+    totalPlays: breakdown.reduce((n, g) => n + g.plays, 0),
+    recent: recent.map(r => ({ game: r.game, correct: r.correct, total: r.total, xpEarned: r.xpEarned, createdAt: r.createdAt })),
+    lastMood: moods[0]?.mood ?? null,
+  };
 }
 
 /** Reject disallowed child input to the creative tools before it reaches the model. */
@@ -732,6 +773,93 @@ export const appRouter = router({
       .mutation(({ input }) => ({ success: true, testType: input.testType })),
   }),
 
+  progress: router({
+    // The kid UI polls this after every game; it is not PIN-locked (the child sees their own stars).
+    get: consentedProcedure
+      .input(z.object({ profileId: z.string().max(64), localDay: z.string().max(10).optional() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedProfile(input.profileId, ctx.user.id);
+        return progressSnapshot(input.profileId, input.localDay);
+      }),
+
+    // Called once when a round ends. Results come from the client, so the server only checks they are possible.
+    submitPlay: consentedProcedure
+      .input(
+        z
+          .object({
+            profileId: z.string().max(64),
+            game: z.enum(GAME_IDS),
+            level: z.number().int().min(1).max(3),
+            correct: z.number().int().min(0).max(MAX_QUESTIONS_PER_PLAY),
+            total: z.number().int().min(1).max(MAX_QUESTIONS_PER_PLAY),
+            durationMs: z.number().int().min(0).max(60 * 60 * 1000),
+            localDay: z.string().max(10).optional(),
+          })
+          .refine(v => v.correct <= v.total, { message: "correct cannot exceed total" })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProfile(input.profileId, ctx.user.id);
+        checkRateLimit(`play:${ctx.user.id}`, 30, 60 * 1000);
+        if (input.durationMs < input.total * MIN_MS_PER_QUESTION) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "That round finished too fast to be real." });
+        }
+        const result = await db.recordPlay({
+          userId: ctx.user.id,
+          profileId: input.profileId,
+          game: input.game,
+          level: input.level,
+          correct: input.correct,
+          total: input.total,
+          durationMs: input.durationMs,
+          day: resolvePlayDay(input.localDay, new Date()),
+        });
+        return { ...result, newBadges: result.newBadges.map(id => ({ id, name: badgeById(id)?.name ?? id, icon: badgeById(id)?.icon ?? "🏅" })) };
+      }),
+
+    // Mood check-in the child does for themselves. Notes are screened like chat messages.
+    checkin: consentedProcedure
+      .input(
+        z.object({
+          profileId: z.string().max(64),
+          mood: z.enum(MOODS),
+          note: z.string().trim().max(200).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProfile(input.profileId, ctx.user.id);
+        checkRateLimit(`mood:${ctx.user.id}`, 10, 60 * 1000);
+        if ((await db.countRecentMoodCheckins(input.profileId, new Date(Date.now() - 24 * 60 * 60 * 1000))) >= 10) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "You've checked in a lot today. Come back tomorrow!" });
+        }
+        const verdict = input.note ? screenText(input.note) : { level: "safe" as const };
+        const { newBadges } = await db.addMoodCheckin({
+          userId: ctx.user.id,
+          profileId: input.profileId,
+          mood: input.mood,
+          note: input.note,
+          flagged: verdict.level,
+        });
+        return {
+          flagged: verdict.level,
+          // A worrying note gets the same supportive reply as chat, and the parent sees it flagged.
+          reply: verdict.level === "safe" ? null : ("reply" in verdict ? verdict.reply ?? null : null),
+          newBadges: newBadges.map(id => ({ id, name: badgeById(id)?.name ?? id, icon: badgeById(id)?.icon ?? "🏅" })),
+        };
+      }),
+
+    // Parent view: real numbers per child, no AI involved.
+    overview: parentProcedure.query(async ({ ctx }) => {
+      const profiles = await db.listProfiles(ctx.user.id);
+      return Promise.all(
+        profiles.map(async p => ({
+          profile: { id: p.id, childName: p.childName, ageGroup: p.ageGroup },
+          progress: await progressSnapshot(p.id),
+          moods: (await db.listMoodCheckins(p.id, 14)).map(m => ({ mood: m.mood, note: m.note, flagged: m.flagged, createdAt: m.createdAt })),
+        }))
+      );
+    }),
+  }),
+
   consent: router({
     status: protectedProcedure.query(async ({ ctx }) => {
       const active = await db.getActiveConsent(ctx.user.id);
@@ -839,6 +967,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
         const chats = await db.getProfileChats(ctx.user.id, profile.id);
+        const progress = await db.getProfileProgressExport(profile.id);
         await db.logAudit(ctx.user.id, "profile_exported", profile.childName);
         return {
           exportedAt: new Date().toISOString(),
@@ -849,6 +978,7 @@ export const appRouter = router({
             createdAt: profile.createdAt,
           },
           chats,
+          progress,
         };
       }),
   }),

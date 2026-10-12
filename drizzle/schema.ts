@@ -1,4 +1,4 @@
-import { mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { mysqlEnum, mysqlTable, text, timestamp, unique, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -553,3 +553,53 @@ export const auditEvents = mysqlTable("audit_events", {
 });
 
 export type AuditEvent = typeof auditEvents.$inferSelect;
+
+
+/** One row per child: XP and streak. Updated only by the server when a finished game is submitted. */
+export const childProgress = mysqlTable("child_progress", {
+  profileId: varchar("profileId", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  xp: int("xp").notNull().default(0),
+  streakDays: int("streakDays").notNull().default(0),
+  longestStreak: int("longestStreak").notNull().default(0),
+  // 'YYYY-MM-DD' in the child's own calendar day (see resolvePlayDay)
+  lastPlayDate: varchar("lastPlayDate", { length: 10 }),
+  updatedAt: timestamp("updatedAt", { fsp: 3 }).defaultNow(),
+});
+
+/** Every finished mini-game round. Results are reported by the client and only sanity-checked by the server. */
+export const gamePlays = mysqlTable("game_plays", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  profileId: varchar("profileId", { length: 64 }).notNull(),
+  game: varchar("game", { length: 20 }).notNull(),
+  level: int("level").notNull().default(1),
+  correct: int("correct").notNull(),
+  total: int("total").notNull(),
+  durationMs: int("durationMs").notNull().default(0),
+  xpEarned: int("xpEarned").notNull().default(0),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+});
+
+export const childBadges = mysqlTable(
+  "child_badges",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    userId: varchar("userId", { length: 64 }).notNull(),
+    profileId: varchar("profileId", { length: 64 }).notNull(),
+    badgeId: varchar("badgeId", { length: 40 }).notNull(),
+    earnedAt: timestamp("earnedAt", { fsp: 3 }).defaultNow(),
+  },
+  t => [unique("child_badges_profile_badge").on(t.profileId, t.badgeId)]
+);
+
+/** Mood check-ins a child does for themselves; visible to the parent. */
+export const moodCheckins = mysqlTable("mood_checkins", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  profileId: varchar("profileId", { length: 64 }).notNull(),
+  mood: varchar("mood", { length: 20 }).notNull(),
+  note: varchar("note", { length: 200 }),
+  flagged: mysqlEnum("flagged", ["safe", "review", "blocked"]).default("safe"),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+});

@@ -23,6 +23,7 @@ const store = vi.hoisted(() => ({
   createProfile: vi.fn(),
   updateProfile: vi.fn(),
   getProfileChats: vi.fn(),
+  getProfileProgressExport: vi.fn(),
   deleteProfileData: vi.fn(),
   deleteAllUserData: vi.fn(),
 }));
@@ -156,9 +157,11 @@ describe("child profiles", () => {
   it("exports a child's profile and conversations and audits the export", async () => {
     store.getProfile.mockResolvedValue({ id: "p1", userId: "user-a", childName: "Mia", ageGroup: "kids", selectedCharacter: "sage", createdAt: new Date() });
     store.getProfileChats.mockResolvedValue([{ id: "s1", messages: [{ role: "user", content: "hi" }] }]);
+    store.getProfileProgressExport.mockResolvedValue({ progress: { xp: 125 }, plays: [], badges: [], moods: [] });
     const out = await (await caller({ unlocked: true })).api.profiles.export({ profileId: "p1" });
     expect(out.profile.childName).toBe("Mia");
     expect(out.chats[0].messages[0].content).toBe("hi");
+    expect(out.progress.progress).toEqual({ xp: 125 });
     expect(store.getProfileChats).toHaveBeenCalledWith("user-a", "p1");
     expect(store.logAudit).toHaveBeenCalledWith("user-a", "profile_exported", "Mia");
   });
