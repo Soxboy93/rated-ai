@@ -29,6 +29,16 @@ Health: `GET /api/trpc/system.health?input={"json":{"timestamp":0}}`.
 ## 5. DNS and proxy for rated-ai.com
 Point `rated-ai.com` (and `www`) at your proxy; proxy to `localhost:$PORT`; forward `X-Forwarded-For` and `X-Forwarded-Proto`. The app sets `trust proxy` to 1 hop, so run exactly one proxy in front of it or adjust `app.set("trust proxy", …)` in `server/_core/index.ts`.
 
+## 5b. Fastest path: Docker Compose on a VPS (includes HTTPS)
+On any Linux server with Docker (for example a Hostinger VPS) and the domain's DNS `A` records (`@` and `www`) pointing at the server's IP:
+```bash
+git clone https://github.com/Soxboy93/rated-ai && cd rated-ai
+git checkout claude/parent-auth-safety-provider-neutral   # until merged
+cp .env.example .env    # fill JWT_SECRET, LLM_API_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
+docker compose up -d --build
+```
+Caddy obtains the TLS certificate automatically once DNS resolves to the server and ports 80/443 are open. Migrations run before the app starts. This bundle has not been run in the authoring environment (no Docker available there), so expect to debug the first start.
+
 ## 6. Known operational limits
 - Rate limiting is in-memory, per process. Run a single instance, or move `server/_core/rateLimit.ts` to a shared store (Redis) before scaling out.
 - Email delivery (weekly summaries, password reset, email verification) is not implemented. There is no password-reset flow yet.

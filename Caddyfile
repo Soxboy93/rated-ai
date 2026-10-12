@@ -1,0 +1,4 @@
+rated-ai.com, www.rated-ai.com {
+	encode gzip
+	reverse_proxy app:3000
+}
