@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Route, Router as WouterRouter, Switch, useLocation } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -89,7 +89,19 @@ function Router() {
 const DEMO = !!import.meta.env.VITE_DEMO;
 const demoHook = DEMO ? memoryLocation({ path: "/" }).hook : undefined;
 
+function useAiLive() {
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (!DEMO) return;
+    let off = () => {};
+    void import("./demo/ai").then(m => { m.initAi(); setLive(m.aiState() === "live"); off = m.onAiState(s => setLive(s === "live")); });
+    return () => off();
+  }, []);
+  return live;
+}
+
 function App() {
+  const aiLive = useAiLive();
   return (
     <LangProvider>
     <ErrorBoundary>
@@ -99,7 +111,7 @@ function App() {
           {demoHook ? <WouterRouter hook={demoHook}><Router /></WouterRouter> : <Router />}
           {DEMO && (
             <div role="note" style={{ position: "fixed", left: 10, bottom: "calc(10px + env(safe-area-inset-bottom, 0px))", zIndex: 30, pointerEvents: "none", background: "#fff4d6", color: "#6e4300", border: "2px solid #f0cf86", borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>
-              {t("Preview · example data · nothing is saved")}
+              {t("Preview · example data · nothing is saved")}{aiLive && <> · {t("AI answers are live (Claude)")}</>}
             </div>
           )}
         </TooltipProvider>

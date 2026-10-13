@@ -11,6 +11,7 @@ export const AR: Record<string, string> = {
   /* general */
   "Loading…": "جارٍ التحميل…",
   "Preview · example data · nothing is saved": "نسخة تجريبية · بيانات مثال · لا يُحفظ شيء",
+  "AI answers are live (Claude)": "الإجابات حيّة بالذكاء الاصطناعي (Claude)",
   "Rated AI": "Rated AI",
   "Home": "الرئيسية",
   "Back home": "العودة إلى الرئيسية",

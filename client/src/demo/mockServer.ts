@@ -16,6 +16,7 @@ import {
 import { screenText, safeFallbackReply } from "../../../server/safety";
 import { gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
+import { aiAssistant, aiChat, aiHomework, aiLessonDraft, aiLessonRevise, aiStory, AiRefused } from "./ai";
 
 class DemoError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -352,16 +353,18 @@ const H: Record<string, Handler> = {
   },
   "lessons.list": () => { requireParent(); requireSchool(); return [...S.lessons].sort((a, b) => +b.updatedAt - +a.updatedAt).map(l => ({ id: l.id, title: l.title, subject: l.subject, grade: l.grade, language: l.language, topic: l.topic, durationMin: l.durationMin, createdAt: l.updatedAt, updatedAt: l.updatedAt, sharedWith: S.shares.filter(x => x.lessonId === l.id && !x.archived).length })); },
   "lessons.get": ({ lessonId }) => { requireParent(); requireSchool(); const l = lessonOf(lessonId); return { id: l.id, title: l.title, subject: l.subject, grade: l.grade, language: l.language, topic: l.topic, durationMin: l.durationMin, hasSource: !!l.sourceText, content: l.content, updatedAt: l.updatedAt }; },
-  "lessons.generate": ({ subject, grade, topic, durationMin, language, sourceText }) => {
+  "lessons.generate": async ({ subject, grade, topic, durationMin, language, sourceText }) => {
     requireParent(); requireConsent(); requireSchool();
     if ((SOURCE_REQUIRED_SUBJECTS as readonly string[]).includes(subject) && (sourceText?.length ?? 0) < MIN_SOURCE_CHARS) throw new DemoError("BAD_REQUEST", "For this subject, paste the textbook passage you are teaching from so the lesson stays faithful to it.");
-    const l: Lesson = { id: uid(), title: topic.slice(0, 200), subject, grade, language, topic, durationMin, sourceText: sourceText ?? null, content: cannedLesson(topic, language, sourceText ?? null), updatedAt: new Date() };
+    const l: Lesson = { id: uid(), title: topic.slice(0, 200), subject, grade, language, topic, durationMin, sourceText: sourceText ?? null, content: (await ai(() => aiLessonDraft({ subject, grade, topic, durationMin, language, sourceText }))) ?? cannedLesson(topic, language, sourceText ?? null), updatedAt: new Date() };
     S.lessons.push(l); log("lesson_created", topic.slice(0, 100)); return { id: l.id };
   },
-  "lessons.revise": ({ lessonId, instruction }) => {
+  "lessons.revise": async ({ lessonId, instruction }) => {
     requireParent(); requireConsent(); requireSchool(); const l = lessonOf(lessonId);
     const ar = l.language === "ar";
-    if (/short|قصر/i.test(instruction)) l.content = normalizeLesson({ ...l.content, steps: l.content.steps.slice(0, 2), activities: [] });
+    const revised = await ai(() => aiLessonRevise(l.content, instruction, l.language));
+    if (revised) l.content = revised;
+    else if (/short|قصر/i.test(instruction)) l.content = normalizeLesson({ ...l.content, steps: l.content.steps.slice(0, 2), activities: [] });
     else l.content = normalizeLesson({ ...l.content, quiz: [...l.content.quiz, { q: ar ? "1/6 + 2/6 = ؟" : "1/6 + 2/6 = ?", options: ["3/12", "3/6", "2/6", "1/6"], answer: 1, explanation: ar ? "نجمع البسطين." : "Add the tops." }] });
     l.updatedAt = new Date(); return { success: true };
   },
@@ -401,9 +404,11 @@ const H: Record<string, Handler> = {
       students: students.map(st => { const g = graded.find(x => x.profileId === st.id); return { profileId: st.id, childName: st.childName, correct: g?.correct ?? null, total: g?.total ?? l.content.quiz.length }; }),
     };
   },
-  "assistant.ask": ({ messages, language }) => {
+  "assistant.ask": async ({ messages, language }) => {
     requireParent(); requireConsent(); requireSchool();
     const last = String(messages[messages.length - 1]?.content ?? "");
+    const live = await ai(() => aiAssistant(messages, language));
+    if (live) return { reply: live };
     return { reply: language === "ar"
       ? `اقتراح تجريبي: ابدأ بمثال من حياة الطلاب اليومية، ثم اطلب منهم تفسيره بكلماتهم. (ردّ تجريبي: في التطبيق الحقيقي يجيب المساعد عن سؤالك «${last.slice(0, 60)}» بالذكاء الاصطناعي.)`
       : `Preview suggestion: start with an example from the students' everyday life, then ask them to explain it in their own words. (Preview reply: in the live app the companion answers "${last.slice(0, 60)}" with the AI model.)` };
@@ -491,26 +496,33 @@ const H: Record<string, Handler> = {
   },
   "chat.getMessages": ({ sessionId }) => { requireUser(); return S.messages.filter(m => m.sessionId === sessionId).sort((a, b) => +a.createdAt - +b.createdAt); },
   "chat.getAllSessions": () => { requireUser(); return S.sessions; },
-  "chat.sendMessage": ({ sessionId, message }) => {
+  "chat.sendMessage": async ({ sessionId, message }) => {
     requireConsent();
     const s = S.sessions.find(x => x.id === sessionId); if (!s) throw new DemoError("NOT_FOUND", "Chat session not found");
     const v = screenText(message, s.language); const now = Date.now();
+    const history = S.messages.filter(m => m.sessionId === sessionId && m.flagged === "safe").sort((a, b) => +a.createdAt - +b.createdAt).map(m => ({ role: m.role, content: m.content }));
     S.messages.push({ id: uid(), sessionId, role: "user", content: message, flagged: v.level, createdAt: new Date(now) });
-    const reply = v.level !== "safe" ? (v.reply as string) : demoReply(message, s.characterId, s.ageGroup, s.language);
+    // Flagged messages never reach the model; only safe ones are sent to Claude.
+    const reply = v.level !== "safe" ? (v.reply as string)
+      : (await ai(() => aiChat({ characterId: s.characterId, ageGroup: s.ageGroup, language: s.language, history, message }))) ?? demoReply(message, s.characterId, s.ageGroup, s.language);
     S.messages.push({ id: uid(), sessionId, role: "assistant", content: reply, flagged: "safe", createdAt: new Date(now + 1) });
     return { message: reply, flagged: v.level };
   },
 
-  "creative.generateStory": ({ prompt, language }) => {
+  "creative.generateStory": async ({ prompt, language }) => {
     requireConsent();
     if (screenText(prompt, language ?? "en").level !== "safe") throw new DemoError("BAD_REQUEST", language === "ar" ? safeFallbackReply("ar") : "That's not something I can write about. Let's try a different idea!");
+    const live = await ai(() => aiStory(prompt, language ?? "en"));
+    if (live) return { content: live };
     if (language === "ar") return { content: `كان يا ما كان، ${prompt}.\n\nفي صباح مشرق حدث شيء مفاجئ. ظهرت مشكلة صغيرة تحتاج إلى حل ذكي ولطيف. فأخذ بطلنا نفَساً عميقاً وابتسم وقرّر أن يحاول.\n\nوفي الطريق انضم إليه أصدقاء جدد، وعملوا معاً حتى وجدوا الحل. وتعلّم الجميع أن الفضول والشجاعة يجعلان العالم أجمل.\n\nوانتهت الحكاية.\n\n(قصة تجريبية: في التطبيق الحقيقي يكتب الذكاء الاصطناعي قصة جديدة في كل مرة.)` };
     return { content: `Once upon a time, there was ${prompt}.\n\nOne bright morning, something surprising happened. A small problem appeared, and it needed a clever, kind answer. With a deep breath and a big smile, our hero decided to try.\n\nAlong the way, new friends joined the adventure. Together they worked it out, and everyone learned that being curious and brave makes the world a little bit brighter.\n\nThe end.\n\n(Preview story: in the live app the AI writes a new story every time.)` };
   },
   "creative.generateIllustration": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Could not create the picture right now."); },
   "creative.generateAvatar": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Pictures need the live app."); },
-  "homework.analyzeHomework": ({ language }) => {
+  "homework.analyzeHomework": async ({ language, imageData, subject }) => {
     requireConsent();
+    const live = await ai(() => aiHomework({ imageBase64: imageData, subject, language: language ?? "en" }));
+    if (live && live.steps.length) return live;
     if (language === "ar") return { question: "ما ناتج 12 + 15؟", steps: ["فكّك كل عدد إلى عشرات وآحاد: 12 = 10 + 2 و 15 = 10 + 5.", "اجمع العشرات: 10 + 10 = 20.", "اجمع الآحاد: 2 + 5 = 7.", "اجمع الناتجين: 20 + 7 = 27."], answer: "27", explanation: "تفكيك الأعداد إلى عشرات وآحاد يسهّل الجمع. (تجريبي: في التطبيق الحقيقي يقرأ المساعد صورة واجبك الفعلية.)", subject: "الرياضيات", difficulty: "easy" };
     return { question: "What is 12 + 15?", steps: ["Split each number into tens and ones: 12 = 10 + 2 and 15 = 10 + 5.", "Add the tens: 10 + 10 = 20.", "Add the ones: 2 + 5 = 7.", "Put them together: 20 + 7 = 27."], answer: "27", explanation: "Splitting numbers into tens and ones makes adding easier. (Preview: the live app reads your actual photo.)", subject: "Maths", difficulty: "easy" };
   },
@@ -590,6 +602,12 @@ function seedSchool(lang: Lang) {
   picks.forEach((answers, i) => { const g = gradeQuiz(lesson.content.quiz, answers); S.lessonResults.push({ shareId: "sh-1", profileId: `p-s${i}`, answers, correct: g.correct, total: g.total }); });
 }
 
+/** Runs a live-AI call; a refusal becomes the same friendly error the real server returns, anything else falls back to canned. */
+async function ai<T>(fn: () => Promise<T | null>): Promise<T | null> {
+  try { return await fn(); }
+  catch (e) { if (e instanceof AiRefused) throw new DemoError("BAD_REQUEST", e.message); return null; }
+}
+
 /* ---------------------------------------------------------------- fetch */
 export const resetDemo = () => { S = fresh(); seed(); };
 
@@ -599,17 +617,17 @@ export async function demoFetch(input: RequestInfo | URL, init?: RequestInit): P
   const paths = decodeURIComponent(url.pathname.replace(/^.*\/api\/trpc\//, "")).split(",");
   const raw = (init?.method ?? "GET").toUpperCase() === "GET" ? url.searchParams.get("input") : (init?.body as string | null);
   const batch = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-  const results = paths.map((path, i) => {
+  const results = await Promise.all(paths.map(async (path, i) => {
     try {
       const h = H[path];
       if (!h) throw new DemoError("NOT_FOUND", `No procedure found on path "${path}"`);
       const arg = batch[i] === undefined ? undefined : superjson.deserialize(batch[i] as any);
-      return { result: { data: superjson.serialize(h(arg) ?? null) } };
+      return { result: { data: superjson.serialize((await h(arg)) ?? null) } };
     } catch (e) {
       const err = e instanceof DemoError ? e : new DemoError("INTERNAL_SERVER_ERROR", e instanceof Error ? e.message : "Error");
       return { error: superjson.serialize({ message: err.message, code: -32603, data: { code: err.code, httpStatus: HTTP[err.code] ?? 500, path } }) };
     }
-  });
+  }));
   await new Promise(r => setTimeout(r, 60)); // feel like a network call
   return new Response(JSON.stringify(results), { status: 200, headers: { "content-type": "application/json" } });
 }
