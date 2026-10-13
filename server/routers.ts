@@ -50,6 +50,8 @@ import {
   router,
 } from "./_core/trpc";
 import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt, languageRule } from "./prompts";
+import { assistantSystemPrompt, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "./lessonPrompts";
+import { LESSON_SUBJECTS, MAX_SOURCE_CHARS, MIN_SOURCE_CHARS, SOURCE_REQUIRED_SUBJECTS, gradeQuiz, normalizeLesson, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
 import { safeFallbackReply, screenText, screenWithProvider } from "./safety";
 
 const MAX_CHAT_MESSAGE_CHARS = 2000;
@@ -126,7 +128,7 @@ function assertNameAllowed(name: string) {
 async function progressSnapshot(profileId: string, clientDay?: string) {
   const today = resolvePlayDay(clientDay, new Date());
   const profileRow = await db.getProfile(profileId);
-  const [row, badges, breakdown, recent, moods, assignments] = await Promise.all([
+  const [row, badges, breakdown, recent, moods, assignments, lessonShares] = await Promise.all([
     db.getChildProgress(profileId),
     db.listBadges(profileId),
     db.getGameBreakdown(profileId),
@@ -138,6 +140,8 @@ async function progressSnapshot(profileId: string, clientDay?: string) {
           Promise.all(list.map(async a => ({ id: a.id, game: a.game, level: a.level, note: a.note, dueDate: a.dueDate, done: (await db.assignmentCompletions(a, [profileId])).has(profileId) })))
         )
       : Promise.resolve([] as Array<{ id: string; game: string; level: number; note: string | null; dueDate: string | null; done: boolean }>),
+    // Lessons the teacher shared with this student's class (title and whether the quiz is done; never the answers).
+    profileRow?.classId ? db.listStudentLessons(profileRow.classId, profileId) : Promise.resolve([]),
   ]);
   const xp = row?.xp ?? 0;
   const lp = levelProgress(xp);
@@ -158,6 +162,7 @@ async function progressSnapshot(profileId: string, clientDay?: string) {
     lastMood: moods[0]?.mood ?? null,
     lastMoodAt: moods[0]?.createdAt ?? null,
     assignments,
+    lessons: lessonShares.map(l => ({ shareId: l.shareId, title: l.title, subject: l.subject, dueDate: l.dueDate, done: !!l.result, result: l.result })),
   };
 }
 
@@ -190,6 +195,49 @@ const textOf = (response: Awaited<ReturnType<typeof invokeLLM>>) => {
   const content = response.choices[0]?.message.content;
   return typeof content === "string" ? content : "";
 };
+
+
+/* ------------------------------------------------------------------ teacher companion helpers */
+
+async function requireOwnedLesson(lessonId: string, userId: string) {
+  const row = await db.getLesson(lessonId);
+  if (!row || row.userId !== userId) throw new TRPCError({ code: "NOT_FOUND", message: "Lesson not found" });
+  return row;
+}
+
+const parseContent = (raw: string): LessonContent => {
+  try {
+    return normalizeLesson(JSON.parse(raw));
+  } catch {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "This lesson could not be read." });
+  }
+};
+
+/** AI output that children will read is screened before it is stored, same as any other generated text. */
+function assertLessonSuitable(content: LessonContent) {
+  if (screenText(studentFacingText(content), "en").level === "blocked" || screenText(studentFacingText(content), "ar").level === "blocked") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "The draft contained unsuitable content. Please try again with different wording." });
+  }
+}
+
+const MAX_LESSONS_PER_TEACHER = 100;
+const lessonInput = {
+  title: z.string().trim().min(1).max(200),
+};
+const unreadable = () => new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The assistant could not write a usable lesson. Please try again." });
+
+/** Asks the model for a lesson as JSON and coerces it; one bad answer from the model never reaches the database. */
+async function draftLesson(params: Parameters<typeof invokeLLM>[0]): Promise<LessonContent> {
+  const response = await llm({ ...params, response_format: { type: "json_object" } });
+  let content: LessonContent;
+  try {
+    content = normalizeLesson(JSON.parse(textOf(response).replace(/^```(?:json)?\s*|\s*```$/g, "")));
+  } catch {
+    throw unreadable();
+  }
+  assertLessonSuitable(content);
+  return content;
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -1143,6 +1191,244 @@ export const appRouter = router({
       await db.archiveAssignment(a.id);
       return { success: true };
     }),
+  }),
+
+  // ------------------------------------------------------------------ teacher companion
+  lessons: router({
+    list: parentProcedure.query(async ({ ctx }) => {
+      requireSchool(ctx.user);
+      const [rows, shares] = await Promise.all([db.listLessons(ctx.user.id), db.listLessonShares(ctx.user.id)]);
+      return rows.map(l => ({ ...l, sharedWith: shares.filter(x => x.lessonId === l.id).length }));
+    }),
+
+    get: parentProcedure.input(z.object({ lessonId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const row = await requireOwnedLesson(input.lessonId, ctx.user.id);
+      return {
+        id: row.id, title: row.title, subject: row.subject, grade: row.grade, language: row.language as Lang, topic: row.topic,
+        durationMin: row.durationMin, hasSource: !!row.sourceText, content: parseContent(row.content), updatedAt: row.updatedAt,
+      };
+    }),
+
+    generate: consentedParentProcedure
+      .input(
+        z.object({
+          subject: z.enum(LESSON_SUBJECTS),
+          grade: z.number().int().min(1).max(12),
+          topic: z.string().trim().min(3).max(300),
+          durationMin: z.number().int().min(15).max(90).default(45),
+          language: langSchema,
+          notes: z.string().trim().max(500).optional(),
+          sourceText: z.string().trim().max(MAX_SOURCE_CHARS).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        checkRateLimit(`lesson-gen:${ctx.user.id}`, 12, 60 * 60 * 1000);
+        if (SOURCE_REQUIRED_SUBJECTS.includes(input.subject) && (input.sourceText?.length ?? 0) < MIN_SOURCE_CHARS) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "For this subject, paste the textbook passage you are teaching from so the lesson stays faithful to it." });
+        }
+        if ((await db.countLessons(ctx.user.id)) >= MAX_LESSONS_PER_TEACHER) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "You can keep up to 100 lessons. Delete one first." });
+        }
+        const content = await draftLesson({
+          messages: [
+            { role: "system", content: generationSystemPrompt(input.language, !!input.sourceText) },
+            { role: "user", content: generationUserPrompt(input) },
+          ],
+        });
+        const id = randomUUID();
+        await db.createLesson({
+          id, userId: ctx.user.id, title: input.topic.slice(0, 200), subject: input.subject, grade: input.grade, language: input.language,
+          topic: input.topic, durationMin: input.durationMin, sourceText: input.sourceText || null, content: JSON.stringify(content),
+        });
+        await db.logAudit(ctx.user.id, "lesson_created", input.topic.slice(0, 100));
+        return { id };
+      }),
+
+    // "Make it simpler", "add two more questions", "shorter": the model rewrites the lesson following the instruction.
+    revise: consentedParentProcedure
+      .input(z.object({ lessonId: z.string().max(64), instruction: z.string().trim().min(3).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        checkRateLimit(`lesson-gen:${ctx.user.id}`, 12, 60 * 60 * 1000);
+        const row = await requireOwnedLesson(input.lessonId, ctx.user.id);
+        const content = await draftLesson({
+          messages: [
+            { role: "system", content: revisionSystemPrompt(row.language === "ar" ? "ar" : "en") },
+            { role: "user", content: revisionUserPrompt(parseContent(row.content), input.instruction) },
+          ],
+        });
+        await db.updateLesson(row.id, { content: JSON.stringify(content) });
+        return { success: true };
+      }),
+
+    // The teacher's own edits. Content is re-validated, so a hand-edited quiz can never be malformed.
+    update: consentedParentProcedure
+      .input(z.object({ lessonId: z.string().max(64), title: lessonInput.title.optional(), content: z.unknown().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        const row = await requireOwnedLesson(input.lessonId, ctx.user.id);
+        const patch: { title?: string; content?: string } = {};
+        if (input.title) patch.title = input.title;
+        if (input.content !== undefined) {
+          let content: LessonContent;
+          try {
+            content = normalizeLesson(input.content);
+          } catch {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "A lesson needs at least one teaching step." });
+          }
+          assertLessonSuitable(content);
+          patch.content = JSON.stringify(content);
+        }
+        await db.updateLesson(row.id, patch);
+        return { success: true };
+      }),
+
+    delete: parentProcedure.input(z.object({ lessonId: z.string().max(64) })).mutation(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const row = await requireOwnedLesson(input.lessonId, ctx.user.id);
+      await db.deleteLesson(ctx.user.id, row.id);
+      await db.logAudit(ctx.user.id, "lesson_deleted", row.title.slice(0, 100));
+      return { success: true };
+    }),
+
+    // Share a lesson with a class: students see its summary and examples and can take its quiz.
+    share: consentedParentProcedure
+      .input(z.object({ lessonId: z.string().max(64), classId: z.string().max(64), dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        const [lesson, cls] = await Promise.all([requireOwnedLesson(input.lessonId, ctx.user.id), requireOwnedClass(input.classId, ctx.user.id)]);
+        const content = parseContent(lesson.content);
+        if (content.quiz.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Add at least one quiz question before sharing this lesson with students." });
+        assertLessonSuitable(content);
+        const open = await db.listLessonShares(ctx.user.id, cls.id);
+        if (open.some(x => x.lessonId === lesson.id)) throw new TRPCError({ code: "CONFLICT", message: "This lesson is already shared with that class." });
+        if (open.length >= 10) throw new TRPCError({ code: "BAD_REQUEST", message: "A class can have up to 10 shared lessons. Archive one first." });
+        const id = randomUUID();
+        await db.createLessonShare({ id, userId: ctx.user.id, classId: cls.id, lessonId: lesson.id, dueDate: input.dueDate });
+        await db.logAudit(ctx.user.id, "lesson_shared", `${lesson.title.slice(0, 60)} → ${cls.name}`);
+        return { id };
+      }),
+
+    shares: parentProcedure.input(z.object({ classId: z.string().max(64).optional() })).query(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      if (input.classId) await requireOwnedClass(input.classId, ctx.user.id);
+      const [shares, classes, lessons] = await Promise.all([db.listLessonShares(ctx.user.id, input.classId), db.listClasses(ctx.user.id), db.listLessons(ctx.user.id)]);
+      return shares.map(sh => ({
+        id: sh.id, lessonId: sh.lessonId, classId: sh.classId, dueDate: sh.dueDate, createdAt: sh.createdAt,
+        lessonTitle: lessons.find(l => l.id === sh.lessonId)?.title ?? "",
+        className: classes.find(c => c.id === sh.classId)?.name ?? "",
+      }));
+    }),
+
+    archiveShare: parentProcedure.input(z.object({ shareId: z.string().max(64) })).mutation(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const sh = await db.getLessonShare(input.shareId);
+      if (!sh || sh.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND", message: "Shared lesson not found" });
+      await db.archiveLessonShare(sh.id);
+      return { success: true };
+    }),
+
+    // Per-question results show which idea the class has not understood yet; per-student scores show who is missing.
+    results: parentProcedure.input(z.object({ shareId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const sh = await db.getLessonShare(input.shareId);
+      if (!sh || sh.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND", message: "Shared lesson not found" });
+      const [lesson, students, results] = await Promise.all([requireOwnedLesson(sh.lessonId, ctx.user.id), db.listClassProfiles(ctx.user.id, sh.classId), db.listLessonResults(sh.id)]);
+      const content = parseContent(lesson.content);
+      const graded = results.map(r => {
+        let answers: number[] = [];
+        try { answers = JSON.parse(r.answers); } catch { /* keep empty */ }
+        return { profileId: r.profileId, ...gradeQuiz(content.quiz, answers) };
+      });
+      return {
+        lessonTitle: lesson.title,
+        studentCount: students.length,
+        doneCount: graded.length,
+        questions: content.quiz.map((q, i) => ({ q: q.q, percentCorrect: graded.length ? Math.round((graded.filter(g => g.perQuestion[i]).length / graded.length) * 100) : null })),
+        students: students.map(s => {
+          const g = graded.find(x => x.profileId === s.id);
+          return { profileId: s.id, childName: s.childName, correct: g?.correct ?? null, total: g?.total ?? content.quiz.length };
+        }),
+      };
+    }),
+  }),
+
+  // A stateless chat with the teacher companion. Nothing here involves children's data and nothing is stored.
+  assistant: router({
+    ask: consentedParentProcedure
+      .input(
+        z.object({
+          messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(3000) })).min(1).max(12),
+          language: langSchema,
+          lessonId: z.string().max(64).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        checkRateLimit(`assistant:${ctx.user.id}`, 30, 10 * 60 * 1000);
+        if (input.messages[input.messages.length - 1].role !== "user") throw new TRPCError({ code: "BAD_REQUEST", message: "Ask a question first." });
+        let context: string | undefined;
+        if (input.lessonId) {
+          const row = await requireOwnedLesson(input.lessonId, ctx.user.id);
+          context = JSON.stringify({ title: row.title, subject: row.subject, grade: row.grade, content: parseContent(row.content) }).slice(0, 6000);
+        }
+        const response = await llm({ messages: [{ role: "system", content: assistantSystemPrompt(input.language, context) }, ...input.messages] });
+        const reply = textOf(response).trim();
+        if (!reply) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: AI_UNAVAILABLE });
+        return { reply };
+      }),
+  }),
+
+  // The student's side of a shared lesson. Grading happens here, so a student cannot score themselves.
+  studentLessons: router({
+    get: consentedProcedure.input(z.object({ profileId: z.string().max(64), shareId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+      const sh = await db.getLessonShare(input.shareId);
+      if (!sh || sh.userId !== ctx.user.id || sh.archivedAt || sh.classId !== profile.classId) throw new TRPCError({ code: "NOT_FOUND", message: "Lesson not found" });
+      const lesson = await db.getLesson(sh.lessonId);
+      if (!lesson) throw new TRPCError({ code: "NOT_FOUND", message: "Lesson not found" });
+      const result = await db.getLessonResult(sh.id, profile.id);
+      return { title: lesson.title, subject: lesson.subject, language: lesson.language as Lang, ...studentView(parseContent(lesson.content)), result: result ? { correct: result.correct, total: result.total } : null };
+    }),
+
+    submit: consentedProcedure
+      .input(
+        z.object({
+          profileId: z.string().max(64),
+          shareId: z.string().max(64),
+          answers: z.array(z.number().int().min(-1).max(3)).max(20),
+          durationMs: z.number().int().min(0).max(60 * 60 * 1000),
+          localDay: z.string().max(10).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+        checkRateLimit(`lesson-submit:${ctx.user.id}`, 30, 60 * 1000);
+        const sh = await db.getLessonShare(input.shareId);
+        if (!sh || sh.userId !== ctx.user.id || sh.archivedAt || sh.classId !== profile.classId) throw new TRPCError({ code: "NOT_FOUND", message: "Lesson not found" });
+        const lesson = await db.getLesson(sh.lessonId);
+        if (!lesson) throw new TRPCError({ code: "NOT_FOUND", message: "Lesson not found" });
+        const content = parseContent(lesson.content);
+        if (input.answers.length !== content.quiz.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Answer every question." });
+        if (input.durationMs < content.quiz.length * MIN_MS_PER_QUESTION) throw new TRPCError({ code: "BAD_REQUEST", message: "That round finished too fast to be real." });
+
+        const graded = gradeQuiz(content.quiz, input.answers);
+        const review = content.quiz.map((q, i) => ({ correctAnswer: q.answer, explanation: q.explanation, right: graded.perQuestion[i] }));
+        const stored = await db.insertLessonResult({ id: randomUUID(), userId: ctx.user.id, shareId: sh.id, profileId: profile.id, answers: JSON.stringify(input.answers), correct: graded.correct, total: graded.total });
+        if (!stored) {
+          // Only the first attempt counts, for the score and for XP.
+          const first = await db.getLessonResult(sh.id, profile.id);
+          return { already: true as const, correct: first?.correct ?? graded.correct, total: first?.total ?? graded.total, review, xpEarned: 0, xp: null, leveledUp: false, newBadges: [] as Array<{ id: string; name: string; icon: string }> };
+        }
+        const play = await db.recordPlay({ userId: ctx.user.id, profileId: profile.id, game: "quiz", level: 1, correct: graded.correct, total: graded.total, durationMs: input.durationMs, day: resolvePlayDay(input.localDay, new Date()) });
+        return {
+          already: false as const, correct: graded.correct, total: graded.total, review,
+          xpEarned: play.xpEarned, xp: play.xp, leveledUp: play.leveledUp,
+          newBadges: play.newBadges.map(id => ({ id, name: badgeById(id)?.name ?? id, icon: badgeById(id)?.icon ?? "🏅" })),
+        };
+      }),
   }),
 
   account: router({

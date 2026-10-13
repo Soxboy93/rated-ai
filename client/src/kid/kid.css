@@ -158,6 +158,8 @@ html.a11y-contrast .kid .k-card, html.a11y-contrast .kid .k-tile, html.a11y-cont
 .k-answer.right { --c: #dcf5e8; border-color: #5cc795; color: #0d4a30; animation: k-pop .35s ease; }
 .k-answer.wrong { --c: #fde4e6; border-color: #ef8a93; color: #6b1217; animation: k-shake .4s ease; }
 .k-answer.right .key { background: #5cc795; color: #fff; } .k-answer.wrong .key { background: #ef8a93; color: #fff; }
+.k-answer.picked { border-color: var(--k-brand); background: var(--k-brand-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-brand) 20%, transparent); }
+.k-answer.picked .key { background: var(--k-brand); color: #fff; }
 .k-answer:disabled { cursor: default; }
 
 /* Chat bubbles */

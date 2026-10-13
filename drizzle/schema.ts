@@ -1,4 +1,4 @@
-import { mysqlEnum, mysqlTable, text, timestamp, unique, varchar } from "drizzle-orm/mysql-core";
+import { longtext, mysqlEnum, mysqlTable, text, timestamp, unique, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -636,3 +636,46 @@ export const classAssignments = mysqlTable("class_assignments", {
   createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
   archivedAt: timestamp("archivedAt", { fsp: 3 }),
 });
+
+/** A lesson plan a teacher drafted with the companion (AI-assisted, teacher-reviewed). `content` is a LessonContent JSON. */
+export const lessons = mysqlTable("lessons", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  subject: varchar("subject", { length: 30 }).notNull(),
+  grade: int("grade").notNull(),
+  language: varchar("language", { length: 2 }).notNull(),
+  topic: varchar("topic", { length: 300 }).notNull(),
+  durationMin: int("durationMin").notNull().default(45),
+  sourceText: text("sourceText"),
+  content: longtext("content").notNull(),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+  updatedAt: timestamp("updatedAt", { fsp: 3 }).defaultNow(),
+});
+
+/** A lesson shared with a class: students see its summary and take its quiz. */
+export const lessonShares = mysqlTable("lesson_shares", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  classId: varchar("classId", { length: 64 }).notNull(),
+  lessonId: varchar("lessonId", { length: 64 }).notNull(),
+  dueDate: varchar("dueDate", { length: 10 }),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+  archivedAt: timestamp("archivedAt", { fsp: 3 }),
+});
+
+/** One student's graded attempt at a shared lesson quiz (first attempt only). Graded on the server. */
+export const lessonResults = mysqlTable(
+  "lesson_results",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    userId: varchar("userId", { length: 64 }).notNull(),
+    shareId: varchar("shareId", { length: 64 }).notNull(),
+    profileId: varchar("profileId", { length: 64 }).notNull(),
+    answers: text("answers").notNull(),
+    correct: int("correct").notNull(),
+    total: int("total").notNull(),
+    createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+  },
+  t => [unique("lesson_results_share_profile").on(t.shareId, t.profileId)]
+);

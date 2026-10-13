@@ -494,6 +494,7 @@ export async function deleteProfileData(userId: string, profileId: string) {
     await tx.delete(schema.childBadges).where(eq(schema.childBadges.profileId, profileId));
     await tx.delete(schema.gamePlays).where(eq(schema.gamePlays.profileId, profileId));
     await tx.delete(schema.moodCheckins).where(eq(schema.moodCheckins.profileId, profileId));
+    await tx.delete(schema.lessonResults).where(eq(schema.lessonResults.profileId, profileId));
     await tx.delete(schema.childProgress).where(eq(schema.childProgress.profileId, profileId));
     await tx
       .delete(schema.userProfiles)
@@ -524,6 +525,7 @@ export async function deleteAllUserData(userId: string) {
       schema.userQuests, schema.smartMoments, schema.progressMetrics, schema.studyReminders,
       schema.collegePrepProgress, schema.challengeParticipants, schema.parentalConsents, schema.auditEvents,
       schema.childProgress, schema.gamePlays, schema.childBadges, schema.moodCheckins, schema.schoolClasses, schema.classAssignments,
+      schema.lessons, schema.lessonShares, schema.lessonResults,
     ] as const;
     for (const table of byUserId) {
       await tx.delete(table).where(eq((table as any).userId, userId));
@@ -719,6 +721,11 @@ export async function deleteClass(userId: string, classId: string) {
   await db.transaction(async tx => {
     await tx.update(schema.userProfiles).set({ classId: null }).where(and(eq(schema.userProfiles.userId, userId), eq(schema.userProfiles.classId, classId)));
     await tx.delete(schema.classAssignments).where(and(eq(schema.classAssignments.userId, userId), eq(schema.classAssignments.classId, classId)));
+    const shares = await tx.select({ id: schema.lessonShares.id }).from(schema.lessonShares).where(and(eq(schema.lessonShares.userId, userId), eq(schema.lessonShares.classId, classId)));
+    if (shares.length > 0) {
+      await tx.delete(schema.lessonResults).where(inArray(schema.lessonResults.shareId, shares.map(x => x.id)));
+      await tx.delete(schema.lessonShares).where(inArray(schema.lessonShares.id, shares.map(x => x.id)));
+    }
     await tx.delete(schema.schoolClasses).where(and(eq(schema.schoolClasses.id, classId), eq(schema.schoolClasses.userId, userId)));
   });
 }
@@ -842,4 +849,132 @@ export async function setUserLanguage(userId: string, language: "ar" | "en") {
   const db = await getDb();
   if (!db) return;
   await db.update(users).set({ language }).where(eq(users.id, userId));
+}
+
+/* ------------------------------------------------------------------ lessons (teacher companion) */
+
+export async function listLessons(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: schema.lessons.id, title: schema.lessons.title, subject: schema.lessons.subject, grade: schema.lessons.grade,
+      language: schema.lessons.language, topic: schema.lessons.topic, durationMin: schema.lessons.durationMin,
+      createdAt: schema.lessons.createdAt, updatedAt: schema.lessons.updatedAt,
+    })
+    .from(schema.lessons)
+    .where(eq(schema.lessons.userId, userId))
+    .orderBy(desc(schema.lessons.updatedAt));
+}
+
+export async function getLesson(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(schema.lessons).where(eq(schema.lessons.id, id)).limit(1);
+  return row;
+}
+
+export async function countLessons(userId: string) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [r] = await db.select({ n: sql<string>`COUNT(*)` }).from(schema.lessons).where(eq(schema.lessons.userId, userId));
+  return Number(r?.n ?? 0);
+}
+
+export async function createLesson(row: typeof schema.lessons.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const now = new Date();
+  await db.insert(schema.lessons).values({ ...row, createdAt: now, updatedAt: now });
+}
+
+export async function updateLesson(id: string, patch: { title?: string; content?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(schema.lessons).set({ ...patch, updatedAt: new Date() }).where(eq(schema.lessons.id, id));
+}
+
+export async function deleteLesson(userId: string, id: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async tx => {
+    const shares = await tx.select({ id: schema.lessonShares.id }).from(schema.lessonShares).where(and(eq(schema.lessonShares.userId, userId), eq(schema.lessonShares.lessonId, id)));
+    if (shares.length > 0) {
+      await tx.delete(schema.lessonResults).where(inArray(schema.lessonResults.shareId, shares.map(x => x.id)));
+      await tx.delete(schema.lessonShares).where(inArray(schema.lessonShares.id, shares.map(x => x.id)));
+    }
+    await tx.delete(schema.lessons).where(and(eq(schema.lessons.id, id), eq(schema.lessons.userId, userId)));
+  });
+}
+
+export async function createLessonShare(row: { id: string; userId: string; classId: string; lessonId: string; dueDate?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(schema.lessonShares).values({ ...row, createdAt: new Date() });
+}
+
+export async function getLessonShare(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(schema.lessonShares).where(eq(schema.lessonShares.id, id)).limit(1);
+  return row;
+}
+
+/** Open (not archived) shares for a teacher, optionally one class, newest first. */
+export async function listLessonShares(userId: string, classId?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = and(eq(schema.lessonShares.userId, userId), isNull(schema.lessonShares.archivedAt), classId ? eq(schema.lessonShares.classId, classId) : undefined);
+  return db.select().from(schema.lessonShares).where(where).orderBy(desc(schema.lessonShares.createdAt));
+}
+
+export async function archiveLessonShare(id: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(schema.lessonShares).set({ archivedAt: new Date() }).where(eq(schema.lessonShares.id, id));
+}
+
+export async function listLessonResults(shareId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(schema.lessonResults).where(eq(schema.lessonResults.shareId, shareId));
+}
+
+export async function getLessonResult(shareId: string, profileId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(schema.lessonResults).where(and(eq(schema.lessonResults.shareId, shareId), eq(schema.lessonResults.profileId, profileId))).limit(1);
+  return row;
+}
+
+/** Stores the first attempt only. Returns false when this student already has a result for the share. */
+export async function insertLessonResult(row: { id: string; userId: string; shareId: string; profileId: string; answers: string; correct: number; total: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    await db.insert(schema.lessonResults).values({ ...row, createdAt: new Date() });
+    return true;
+  } catch (e: any) {
+    if (e?.code === "ER_DUP_ENTRY" || e?.cause?.code === "ER_DUP_ENTRY" || /Duplicate entry/i.test(String(e?.message))) return false;
+    throw e;
+  }
+}
+
+/** What a student sees on their home screen: the open lessons shared with their class, and their own results. */
+export async function listStudentLessons(classId: string, profileId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const shares = await db.select().from(schema.lessonShares).where(and(eq(schema.lessonShares.classId, classId), isNull(schema.lessonShares.archivedAt))).orderBy(desc(schema.lessonShares.createdAt));
+  if (shares.length === 0) return [];
+  const lessonRows = await db
+    .select({ id: schema.lessons.id, title: schema.lessons.title, subject: schema.lessons.subject, language: schema.lessons.language, content: schema.lessons.content })
+    .from(schema.lessons)
+    .where(inArray(schema.lessons.id, Array.from(new Set(shares.map(x => x.lessonId)))));
+  const results = await db.select().from(schema.lessonResults).where(and(eq(schema.lessonResults.profileId, profileId), inArray(schema.lessonResults.shareId, shares.map(x => x.id))));
+  return shares.flatMap(sh => {
+    const l = lessonRows.find(x => x.id === sh.lessonId);
+    if (!l) return [];
+    const r = results.find(x => x.shareId === sh.id);
+    return [{ shareId: sh.id, lessonId: l.id, title: l.title, subject: l.subject, language: l.language, dueDate: sh.dueDate, content: l.content, result: r ? { correct: r.correct, total: r.total } : null }];
+  });
 }

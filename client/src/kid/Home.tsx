@@ -29,6 +29,7 @@ export default function Home() {
   const moodDone = !!progress?.lastMoodAt && new Date(progress.lastMoodAt) >= midnight;
   const playedToday = !!progress?.playedToday;
   const assignments = progress?.assignments ?? [];
+  const lessons = progress?.lessons ?? [];
 
   const games: Tile[] = (Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map(id => ({
     href: `/games/${id}`, name: GAME_META[id].name, sub: GAME_META[id].blurb, icon: GAME_META[id].icon, color: GAME_META[id].color,
@@ -74,6 +75,26 @@ export default function Home() {
             <p className="k-muted" style={{ fontSize: ".95rem" }}>{t("{n} XP to level {level}", { n: lp.next - (progress?.xp ?? 0), level: lp.level + 1 })}</p>
           </div>
         </section>
+
+        {lessons.length > 0 && (
+          <section aria-labelledby="lessons" style={{ display: "grid", gap: 12 }}>
+            <h2 id="lessons" style={sectionTitle}>{t("Lessons from your teacher")}</h2>
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+              {lessons.map(l => (
+                <Link key={l.shareId} href={`/lesson/${l.shareId}`} className="k-card" style={{ display: "flex", alignItems: "center", gap: 14, textDecoration: "none", color: "inherit", background: l.done ? "var(--k-brand-soft)" : undefined, borderColor: l.done ? "var(--k-brand)" : undefined }}>
+                  <span style={{ fontSize: "1.8rem" }} aria-hidden="true">{l.done ? "✅" : "📘"}</span>
+                  <span>
+                    <b style={{ display: "block" }}><bdi>{l.title}</bdi></b>
+                    <span className="k-muted" style={{ fontSize: ".95rem" }}>
+                      {l.done && l.result ? t("{a} out of {b} right", { a: l.result.correct, b: l.result.total }) : t("Read it and take the quiz")}
+                      {l.dueDate && !l.done ? ` · ${t("due {date}", { date: fmtDate(l.dueDate + "T00:00:00") })}` : ""}
+                    </span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {assignments.length > 0 && (
           <section aria-labelledby="assigned" style={{ display: "grid", gap: 12 }}>

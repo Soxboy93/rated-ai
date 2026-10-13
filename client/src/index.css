@@ -175,3 +175,13 @@
 /* One calm type system for the whole app (kid area, sign-in, parent and teacher area). */
 body { font-family: "Nunito", "Tajawal", system-ui, -apple-system, "Segoe UI", sans-serif; }
 :root[lang="ar"] body { font-family: "Tajawal", "Cairo", "Segoe UI", Tahoma, system-ui, sans-serif; letter-spacing: 0; }
+
+/* Printing a lesson: the app root is hidden and only the portal'd sheet prints. */
+.print-sheet { display: none; }
+@media print {
+  #root { display: none !important; }
+  .print-sheet { display: block; padding: 24px; color: #000; background: #fff; font-size: 12pt; line-height: 1.5; }
+  .print-sheet h1 { font-size: 20pt; font-weight: 800; margin: 0 0 4px; }
+  .print-sheet h3 { font-size: 13pt; margin-top: 14px; }
+  .print-sheet ul, .print-sheet ol { margin: 4px 0; }
+}

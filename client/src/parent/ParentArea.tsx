@@ -12,6 +12,8 @@ import ReportsTab from "./ReportsTab";
 import ClassTab from "./ClassTab";
 import RosterTab from "./RosterTab";
 import AssignmentsTab from "./AssignmentsTab";
+import LessonsTab from "./LessonsTab";
+import CompanionChat from "./CompanionChat";
 import { useA11y } from "@/kid/Accessibility";
 import { t, T, fmtDateTime, fmtTime } from "@/i18n";
 import LanguageSwitch from "@/i18n/LanguageSwitch";
@@ -25,6 +27,8 @@ const FAMILY_TABS = [
 ] as const;
 const SCHOOL_TABS = [
   ["class", T("Class progress")],
+  ["lessons", T("Lessons")],
+  ["companion", T("Companion")],
   ["roster", T("Classes and students")],
   ["assign", T("Activities")],
   ["chats", T("Conversations")],
@@ -175,7 +179,7 @@ export default function ParentArea() {
             <div className="w-10 h-10 rounded-full bg-teal-700 flex items-center justify-center"><Shield className="w-5 h-5 text-white" /></div>
             <div>
               <h1 className="text-xl font-bold">{school ? t("Teacher area") : t("Parent area")}</h1>
-              <p className="text-sm text-gray-600">{school ? t("Class progress, activities and privacy") : t("Progress, conversations and privacy")}</p>
+              <p className="text-sm text-gray-600">{school ? t("Lessons, class progress and activities") : t("Progress, conversations and privacy")}</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -196,6 +200,8 @@ export default function ParentArea() {
       <main className="container mx-auto max-w-5xl space-y-6 px-4 py-6">
         {tab === "progress" && <ProgressTab />}
         {tab === "class" && <ClassTab />}
+        {tab === "lessons" && <LessonsTab />}
+        {tab === "companion" && <CompanionChat />}
         {tab === "roster" && <RosterTab />}
         {tab === "assign" && <AssignmentsTab />}
         {tab === "chats" && <ConversationsTab school={school} />}

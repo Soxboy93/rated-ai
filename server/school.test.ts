@@ -10,7 +10,7 @@ const store = vi.hoisted(() => ({
   getStudentAggregates: vi.fn(),
   getChatSession: vi.fn(), createChatSession: vi.fn(), createChatMessage: vi.fn(), getSessionMessages: vi.fn(), updateSessionLastMessage: vi.fn(),
   getChildProgress: vi.fn(), listBadges: vi.fn(), getGameBreakdown: vi.fn(), getRecentPlays: vi.fn(), listMoodCheckins: vi.fn(),
-  setUserLanguage: vi.fn(),
+  setUserLanguage: vi.fn(), listStudentLessons: vi.fn(),
 }));
 const llm = vi.hoisted(() => ({ invokeLLM: vi.fn() }));
 vi.mock("./db", () => store);
@@ -45,6 +45,7 @@ beforeEach(() => {
   store.countUserProfiles.mockResolvedValue(0);
   store.countClassStudents.mockResolvedValue(0);
   store.getStudentAggregates.mockResolvedValue([]);
+  store.listStudentLessons.mockResolvedValue([]);
 });
 
 describe("account types and consent", () => {

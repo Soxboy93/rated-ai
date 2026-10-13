@@ -21,6 +21,7 @@ import Mood from "./kid/Mood";
 import Trophies from "./kid/Trophies";
 import Pet from "./kid/Pet";
 import Homework from "./kid/Homework";
+import Lesson from "./kid/Lesson";
 import { MathGame, SpellingGame, QuizGame, PatternGame, MemoryGame } from "./kid/games";
 import ParentArea from "./parent/ParentArea";
 import { LangProvider, t, useLang } from "./i18n";
@@ -45,6 +46,7 @@ function KidRoutes() {
       <Route path="/trophies" component={Trophies} />
       <Route path="/pet" component={Pet} />
       <Route path="/homework" component={Homework} />
+      <Route path="/lesson/:shareId" component={Lesson} />
       <Route component={NotFound} />
     </Switch>
   );
