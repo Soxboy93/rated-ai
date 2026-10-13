@@ -185,3 +185,6 @@ body { font-family: "Nunito", "Tajawal", system-ui, -apple-system, "Segoe UI", s
   .print-sheet h3 { font-size: 13pt; margin-top: 14px; }
   .print-sheet ul, .print-sheet ol { margin: 4px 0; }
 }
+
+/* Form labels sit above their field (low specificity so flex/inline utility classes still win). */
+label:where([for].text-sm.font-medium) { display: block; }

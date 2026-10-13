@@ -8,6 +8,7 @@ import { useChild } from "./ChildContext";
 import { guideById } from "./guides";
 import { playSound } from "./sound";
 import { t, currentLang } from "@/i18n";
+import Bidi from "@/components/Bidi";
 
 /** A lesson the teacher shared: read the summary and examples, then take the quiz. Marking happens on the server. */
 export default function Lesson() {
@@ -77,8 +78,8 @@ export default function Lesson() {
               const r = out.review[n];
               return (
                 <div key={n} className={`k-card ${r.right ? "k-note-good" : "k-note-warn"}`} style={{ display: "grid", gap: 4 }}>
-                  <b>{r.right ? "✅" : "❌"} {n + 1}. {qq.q}</b>
-                  <span>{t("Right answer:")} {qq.options[r.correctAnswer]}</span>
+                  <b>{r.right ? "✅" : "❌"} {n + 1}. <Bidi>{qq.q}</Bidi></b>
+                  <span>{t("Right answer:")} <Bidi>{qq.options[r.correctAnswer]}</Bidi></span>
                   {r.explanation && <span>💡 {r.explanation}</span>}
                 </div>
               );
@@ -100,12 +101,12 @@ export default function Lesson() {
             <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-homework)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((i / total) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((i / total) * 100))}%` }} /></div>
             <span className="k-chip">{i + 1} / {total}</span>
           </div>
-          <section className="k-card k-in" key={i} aria-live="polite"><h2 style={{ fontSize: "clamp(1.4rem, 5vw, 2rem)", overflowWrap: "anywhere" }}>{cur.q}</h2></section>
+          <section className="k-card k-in" key={i} aria-live="polite"><h2 style={{ fontSize: "clamp(1.4rem, 5vw, 2rem)", overflowWrap: "anywhere" }}><Bidi>{cur.q}</Bidi></h2></section>
           <div style={{ display: "grid", gap: 12 }}>
             {cur.options.map((o, idx) => (
               <button key={idx} type="button" className={`k-answer${answers[i] === idx ? " picked" : ""}`} aria-pressed={answers[i] === idx} onClick={() => choose(idx)}>
                 <span className="key" aria-hidden="true">{["A", "B", "C", "D"][idx]}</span>
-                <span style={{ overflowWrap: "anywhere" }}>{o}</span>
+                <span style={{ overflowWrap: "anywhere" }}><Bidi>{o}</Bidi></span>
               </button>
             ))}
           </div>
@@ -137,8 +138,8 @@ export default function Lesson() {
               <h2 style={{ fontSize: "1.4rem" }}>{t("Examples")}</h2>
               {lesson.examples.map((e, n) => (
                 <div key={n} style={{ display: "grid", gap: 6 }}>
-                  <b style={{ fontSize: "1.1rem" }}>{e.prompt}</b>
-                  {shown[n] ? <p className="k-note-good" style={{ padding: "8px 12px", borderRadius: 12 }}>✅ {e.solution}</p>
+                  <b style={{ fontSize: "1.1rem" }}><Bidi>{e.prompt}</Bidi></b>
+                  {shown[n] ? <p className="k-note-good" style={{ padding: "8px 12px", borderRadius: 12 }}>✅ <Bidi>{e.solution}</Bidi></p>
                     : <div><button type="button" className="k-btn small light" onClick={() => setShown(s => ({ ...s, [n]: true }))}>{t("Show the solution")}</button></div>}
                 </div>
               ))}

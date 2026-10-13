@@ -140,3 +140,9 @@ Verification: 77 unit/API tests; real SQL run against MariaDB; a 34-check script
 Added: Arabic/RTL for the whole client with a coverage-tested dictionary; Arabic game content and safety rules; school account type with its own consent wording, classes, roster import, teacher class-progress view with CSV export, and class activities shown on students' home screens. Migration `0013`. 137 unit/API tests; scripted Arabic browser runs; a school flow run against real MariaDB with database assertions (see `docs/JORDAN_SCHOOLS.md`).
 
 Not done and must not be claimed: no native-speaker educator review of any Arabic text, no legal review, no real-model evaluation in Arabic, no Ministry approval pathway known, nothing deployed. Legacy `teachers`/`classrooms`/`school_integrations` tables from the original code still exist in the schema and are unused.
+
+## 13. Teacher companion (fifth pass)
+
+Added: AI-drafted lesson plans (with an optional pasted textbook passage; required for Islamic education), editing and AI rewrite, a full-screen teach mode, printable plan and quiz, sharing a lesson with a class with a server-graded quiz (first attempt only, XP once), per-question class results, and a stateless teacher chat. Migration `0014`. 160 unit/API tests; a browser run of the whole flow against real MariaDB with database assertions (see `docs/JORDAN_SCHOOLS.md`).
+
+Not done and must not be claimed: no Jordanian teacher has reviewed generated lessons; no curriculum or textbook alignment (the app only knows what a teacher pastes); a real model was not used in testing (a stand-in returned fixed lessons); photos of textbook pages, whiteboard capture, live classroom (real-time) quizzes, and lesson sharing between teachers are not built.

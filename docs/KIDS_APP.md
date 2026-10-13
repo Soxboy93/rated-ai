@@ -50,6 +50,9 @@ Large text, easy-read letters (Lexend font with extra spacing), high contrast, c
 - A scripted browser run (Playwright, 34 checks) registered a parent, added two children and used every screen: all five games, chat, story, doodle (real ink + PNG), mood (including a flagged note), pet, homework, trophies, accessibility settings persisting across reload, the parent area, data export, deleting a child with cascade checks, and phone-width layouts with no sideways scrolling. It found and fixed two real bugs (confetti freezing on screen after a popup was closed, and a collapsed XP bar on phones).
 - The AI in those runs was a local stand-in, so AI-written content (stories, homework steps, chat replies, reports) was not evaluated for quality or safety against a real model.
 
+## Lessons from the teacher
+When a teacher shares a lesson, it appears on the student's home screen. The student reads the summary and worked examples, then takes a short quiz. Answers are shown only after submitting; the server marks the quiz and only the first attempt counts. A finished lesson quiz is saved as a quiz play (so it earns XP and counts towards the quiz badge and the teacher's class numbers).
+
 ## Arabic and schools
 The app runs in Arabic (right-to-left) or English; the choice is saved on the account. School accounts add classes, a teacher view and class activities. Details, checks and the list of things that must happen before any school uses it: `docs/JORDAN_SCHOOLS.md`. All Arabic text is an unreviewed draft.
 

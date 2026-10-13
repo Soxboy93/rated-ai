@@ -17,6 +17,22 @@ Decisions made with the owner: **private schools first**; first Arabic content b
 | Activities | A teacher assigns a game and level to a class (optional note and due date). Students see it on their home screen; it counts as done when they finish that game at that level or higher after it was set. | `client/src/parent/AssignmentsTab.tsx` |
 | Teacher PIN | Same server-side PIN lock as the parent area, so students on a shared device cannot open the teacher area. | `server/_core/trpc.ts` |
 
+### Teacher companion (lessons)
+
+The teacher area also works as a companion for teaching, not only for tracking.
+
+| Feature | What it does |
+|---|---|
+| Lesson drafts | The teacher gives subject, grade, topic, length, language (Arabic or English) and optional notes; the AI drafts goals, warm-up, teaching steps with board points, worked examples, pair/group activities, a 4-option quiz, support/extension ideas, common misconceptions, homework and a student summary. |
+| Textbook-grounded mode | The teacher can paste the textbook passage they teach from (up to 6,000 characters). The model is told to use only that passage. For **Islamic education a passage is required**: the app will not generate that subject from general knowledge. |
+| Review and edit | Every part can be edited by hand; a malformed quiz question (not four distinct options and one correct answer) is dropped on save. "Improve it with the companion" rewrites the lesson from an instruction ("make it simpler", "add two quiz questions"). The screen says clearly that the draft is AI-written and must be checked. |
+| Teach mode | A full-screen presenter for a projector or smart board: one idea per slide in large type, quiz answers and worked solutions revealed on demand, teacher notes hidden unless toggled, timer against the planned minutes, text size, full screen, keyboard control, optional read-aloud. Lesson text keeps its own direction (Arabic lessons are right-to-left; maths stays left-to-right). |
+| Print | A printable lesson plan and a printable student quiz (no answers). |
+| Share with a class | The student sees the summary and worked examples on their home screen and takes the quiz. The **server marks it**: students never receive the answers before submitting, only the first attempt counts, and XP is awarded once. The teacher sees the share of students who got each question right (what to re-teach) and who has not taken it. |
+| Ask the companion | A chat for the teacher (explain a concept simply, examples, worksheets, activity ideas, notes to parents), optionally with a lesson as context. Nothing is stored. |
+
+What it is not: it does not know the Ministry curriculum or textbooks (only what the teacher pastes), it has not been evaluated against real lessons by Jordanian teachers, and the AI can be wrong. Generated student-facing text is screened with the safety rules before it is saved, but that is a keyword filter, not a review. The teacher is responsible for what is taught and shared. Limits: 100 lessons per teacher, 12 AI drafts or rewrites per hour, 30 companion messages per 10 minutes, 10 shared lessons per class.
+
 Limits (enforced server-side): 20 classes per teacher, 60 students per class, 400 students per school account, 10 open activities per class.
 
 ## What the numbers mean (and don't)
@@ -25,9 +41,10 @@ Class progress comes from game results the **app itself counts** (the browser re
 
 ## How it was checked
 
-- 137 automated tests, including: Arabic generator correctness over hundreds of seeds, Arabic safety rules, an i18n coverage test (every string passed to `t()`/`T()`, shared data, and server error messages must have an Arabic entry with matching `{placeholders}`), class overview maths, roster parsing, and school API permission tests.
+- 160 automated tests, including: Arabic generator correctness over hundreds of seeds, Arabic safety rules, an i18n coverage test (every string passed to `t()`/`T()`, shared data, and server error messages must have an Arabic entry with matching `{placeholders}`), class overview maths, roster parsing, and school API permission tests.
 - Scripted browser runs (Playwright) in Arabic at phone and desktop width: no horizontal overflow on any page checked, equations isolated left-to-right, spelling clue mode, Arabic safety reply, language switch at runtime.
 - A school flow run against a **real MariaDB database and the real server**: register as a school, school consent row (version, language, text hash), class creation, roster import (duplicate, phone number and email skipped), assignment stored, student plays an Arabic maths round and it is saved against that student, teacher sees it, CSV has a BOM and Arabic headers, a second school account cannot see or read any of it (HTTP 403), deleting a class keeps the students, deleting the account leaves zero rows.
+- The lesson flow against the real database and server, driven in a browser: Arabic lesson draft, Islamic-education refusal without a passage, passage stored and sent to the model, teach mode across all slides with keyboard control and reveal, hand edit that drops an incomplete question, AI rewrite, share with a class, a student reading it (no answers or teacher notes visible), server-side grading (3 of 4), first-attempt-only XP, teacher results (per question and per student), companion chat not stored, another account blocked (HTTP 403), delete cascade.
 - Not tested: a real AI model answering in Arabic (a local stand-in was used), real Arabic speech voices, real tablets or school networks, any load.
 
 ## What must happen before a school uses this

@@ -92,7 +92,7 @@ export default function LessonsTab() {
   const [view, setView] = useState<{ kind: "list" } | { kind: "new" } | { kind: "lesson"; id: string }>({ kind: "list" });
 
   if (view.kind === "new") return <NewLesson onCancel={() => setView({ kind: "list" })} onCreated={id => { utils.lessons.invalidate(); setView({ kind: "lesson", id }); }} />;
-  if (view.kind === "lesson") return <LessonView lessonId={view.id} onBack={() => { utils.lessons.invalidate(); setView({ kind: "list" }); }} />;
+  if (view.kind === "lesson") return <LessonView lessonId={view.id} onBack={() => { setView({ kind: "list" }); void utils.lessons.list.invalidate(); }} />;
 
   return (
     <div className="space-y-6">

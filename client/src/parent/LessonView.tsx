@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { normalizeLesson, plannedMinutes, type ActivityMode, type LessonContent, type LessonSubject } from "@shared/lesson";
 import type { Lang } from "@shared/jordan";
 import { fmtDate, t, T } from "@/i18n";
+import Bidi from "@/components/Bidi";
 import { gradeLabel } from "./grades";
 import { selectClass } from "./FamilyPanel";
 import { SUBJECT_LABEL } from "./LessonsTab";
@@ -147,15 +148,15 @@ function Body({ c }: { c: LessonContent }) {
           ))}
         </ol>
       </Section>
-      {c.examples.length > 0 && <Section title={t("Worked examples")}>{c.examples.map((e, i) => <p key={i}><b>{e.prompt}</b><br />{e.solution}</p>)}</Section>}
+      {c.examples.length > 0 && <Section title={t("Worked examples")}>{c.examples.map((e, i) => <p key={i}><b><Bidi>{e.prompt}</Bidi></b><br /><Bidi>{e.solution}</Bidi></p>)}</Section>}
       {c.activities.length > 0 && <Section title={t("Activities")}>{c.activities.map((a, i) => <p key={i}><b>{a.title}</b> · {t(MODE_LABEL[a.mode])} · {t("{n} minutes", { n: a.minutes })}<br /><span className="whitespace-pre-wrap">{a.instructions}</span></p>)}</Section>}
       {c.quiz.length > 0 && (
         <Section title={t("Quiz")}>
           <ol className="space-y-3">
             {c.quiz.map((q, i) => (
               <li key={i} className="rounded-lg border p-3">
-                <p className="font-medium">{i + 1}. {q.q}</p>
-                <ul className="mt-1 space-y-0.5">{q.options.map((o, k) => <li key={k} className={k === q.answer ? "font-semibold text-teal-800" : ""}>{["A", "B", "C", "D"][k]}. {o}{k === q.answer ? " ✓" : ""}</li>)}</ul>
+                <p className="font-medium">{i + 1}. <Bidi>{q.q}</Bidi></p>
+                <ul className="mt-1 space-y-0.5">{q.options.map((o, k) => <li key={k} className={k === q.answer ? "font-semibold text-teal-800" : ""}>{["A", "B", "C", "D"][k]}. <Bidi>{o}</Bidi>{k === q.answer ? " ✓" : ""}</li>)}</ul>
                 {q.explanation && <p className="mt-1 text-gray-600">💡 {q.explanation}</p>}
               </li>
             ))}
@@ -182,7 +183,7 @@ function PrintSheet({ lesson, mode }: { lesson: Lesson; mode: "plan" | "workshee
           <p style={{ margin: "16px 0" }}>{t("Name")}: ______________________ &nbsp; {t("Date")}: ____________</p>
           <ol style={{ display: "grid", gap: 14, paddingInlineStart: 20 }}>
             {lesson.content.quiz.map((q, i) => (
-              <li key={i}><b>{q.q}</b><div>{q.options.map((o, k) => <div key={k}>○ {["A", "B", "C", "D"][k]}. {o}</div>)}</div></li>
+              <li key={i}><b><Bidi>{q.q}</Bidi></b><div>{q.options.map((o, k) => <div key={k}>○ {["A", "B", "C", "D"][k]}. <Bidi>{o}</Bidi></div>)}</div></li>
             ))}
           </ol>
         </>
@@ -286,7 +287,7 @@ export default function LessonView({ lessonId, onBack }: { lessonId: string; onB
   const refresh = () => utils.lessons.get.invalidate({ lessonId });
   const update = trpc.lessons.update.useMutation({ onSuccess: () => { setEditing(false); refresh(); } });
   const revise = trpc.lessons.revise.useMutation({ onSuccess: () => { setInstruction(""); refresh(); } });
-  const del = trpc.lessons.delete.useMutation({ onSuccess: () => { utils.lessons.invalidate(); onBack(); } });
+  const del = trpc.lessons.delete.useMutation({ onSuccess: () => onBack() });
 
   useEffect(() => {
     if (!printMode) return;

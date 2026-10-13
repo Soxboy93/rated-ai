@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildSlides, type LessonContent, type Slide } from "@shared/lesson";
 import type { Lang } from "@shared/jordan";
 import { currentLang, t } from "@/i18n";
+import Bidi from "@/components/Bidi";
 import { speak, stopSpeaking, canSpeakIn } from "@/kid/speech";
 
 const MODE_ICON = { individual: "🧍", pair: "👥", group: "👨‍👩‍👧‍👦" } as const;
@@ -71,7 +72,7 @@ export default function TeachMode({ lesson, onExit }: { lesson: { title: string;
   const big = { fontSize: `${2.1 * size}rem`, lineHeight: 1.45 } as const;
   const bullets = (items: string[]) => (
     <ul style={{ ...big, display: "grid", gap: "0.6em", paddingInlineStart: "1.2em", margin: 0 }}>
-      {items.map((b, k) => <li key={k}>{b}</li>)}
+      {items.map((b, k) => <li key={k}><Bidi>{b}</Bidi></li>)}
     </ul>
   );
 
@@ -95,8 +96,8 @@ export default function TeachMode({ lesson, onExit }: { lesson: { title: string;
       case "example":
         return (
           <div style={{ display: "grid", gap: 28 }}>
-            <p style={{ ...big, fontWeight: 700, whiteSpace: "pre-wrap" }}>{slide.prompt}</p>
-            {revealed ? <p style={{ ...big, color: "#7ef0c0", whiteSpace: "pre-wrap" }}>✅ {slide.solution}</p> : <button type="button" className="tm-btn" onClick={() => setRevealed(true)}>{t("Show the solution")}</button>}
+            <p style={{ ...big, fontWeight: 700, whiteSpace: "pre-wrap" }}><Bidi>{slide.prompt}</Bidi></p>
+            {revealed ? <p style={{ ...big, color: "#7ef0c0", whiteSpace: "pre-wrap" }}>✅ <Bidi>{slide.solution}</Bidi></p> : <button type="button" className="tm-btn" onClick={() => setRevealed(true)}>{t("Show the solution")}</button>}
           </div>
         );
       case "activity":
@@ -110,11 +111,11 @@ export default function TeachMode({ lesson, onExit }: { lesson: { title: string;
       case "quiz":
         return (
           <div style={{ display: "grid", gap: 24 }}>
-            <p style={{ ...big, fontWeight: 700 }}>{slide.q}</p>
+            <p style={{ ...big, fontWeight: 700 }}><Bidi>{slide.q}</Bidi></p>
             <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
               {slide.options.map((o, k) => (
                 <li key={k} style={{ ...big, fontSize: `${1.8 * size}rem`, padding: "14px 20px", borderRadius: 16, border: "2px solid", borderColor: revealed && k === slide.answer ? "#7ef0c0" : "rgba(255,255,255,.25)", background: revealed && k === slide.answer ? "rgba(126,240,192,.18)" : "rgba(255,255,255,.06)", display: "flex", gap: 14, alignItems: "center" }}>
-                  <b style={{ opacity: 0.7 }}>{["A", "B", "C", "D"][k]}</b><span>{o}</span>
+                  <b style={{ opacity: 0.7 }}>{["A", "B", "C", "D"][k]}</b><span><Bidi>{o}</Bidi></span>
                 </li>
               ))}
             </ol>

@@ -14,6 +14,7 @@ import {
   resolvePlayDay, xpForPlay, type GameId, type ProgressStats,
 } from "@shared/gamification";
 import { screenText, safeFallbackReply } from "../../../server/safety";
+import { gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
 
 class DemoError extends Error {
@@ -26,6 +27,8 @@ const isoLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 
 type Profile = { id: string; userId: string; childName: string; ageGroup: "kids" | "tweens" | "teens"; selectedCharacter: string | null; classId: string | null; createdAt: Date };
 type Cls = { id: string; name: string; grade: number };
+type Lesson = { id: string; title: string; subject: string; grade: number; language: Lang; topic: string; durationMin: number; sourceText: string | null; content: LessonContent; updatedAt: Date };
+type Share = { id: string; lessonId: string; classId: string; dueDate: string | null; createdAt: Date; archived: boolean };
 type Assignment = { id: string; classId: string; game: GameId; level: number; note: string | null; dueDate: string | null; createdAt: Date; archived: boolean };
 type Play = { id: string; profileId: string; game: GameId; level: number; correct: number; total: number; xpEarned: number; createdAt: Date };
 type Msg = { id: string; sessionId: string; role: "user" | "assistant"; content: string; flagged: "safe" | "review" | "blocked"; createdAt: Date };
@@ -36,6 +39,9 @@ function fresh() {
     user: null as null | { id: string; email: string; name: string | null; role: "user"; loginMethod: string; accountType: AccountType; language: Lang | null; createdAt: Date; lastSignedIn: Date },
     consent: null as null | { version: string; grantedAt: Date },
     classes: [] as Cls[],
+    lessons: [] as Lesson[],
+    shares: [] as Share[],
+    lessonResults: [] as Array<{ shareId: string; profileId: string; answers: number[]; correct: number; total: number }>,
     assignments: [] as Assignment[],
     pin: null as string | null,
     unlocked: false,
@@ -109,6 +115,16 @@ function assignmentsFor(profileId: string) {
   return S.assignments.filter(a => a.classId === classId && !a.archived).map(a => ({ id: a.id, game: a.game, level: a.level, note: a.note, dueDate: a.dueDate, done: doneBy(a, profileId) }));
 }
 
+function lessonsFor(profileId: string) {
+  const classId = S.profiles.find(p => p.id === profileId)?.classId;
+  if (!classId) return [];
+  return S.shares.filter(sh => sh.classId === classId && !sh.archived).map(sh => {
+    const l = S.lessons.find(x => x.id === sh.lessonId)!;
+    const r = S.lessonResults.find(x => x.shareId === sh.id && x.profileId === profileId);
+    return { shareId: sh.id, title: l.title, subject: l.subject, dueDate: sh.dueDate, done: !!r, result: r ? { correct: r.correct, total: r.total } : null };
+  });
+}
+
 function snapshot(profileId: string, clientDay?: string) {
   const today = resolvePlayDay(clientDay, new Date());
   const row = S.progress.get(profileId);
@@ -125,6 +141,7 @@ function snapshot(profileId: string, clientDay?: string) {
     recent: plays.slice(-8).reverse().map(p => ({ game: p.game, correct: p.correct, total: p.total, xpEarned: p.xpEarned, createdAt: p.createdAt })),
     lastMood: moods[0]?.mood ?? null, lastMoodAt: moods[0]?.createdAt ?? null,
     assignments: assignmentsFor(profileId),
+    lessons: lessonsFor(profileId),
   };
 }
 
@@ -166,6 +183,53 @@ function demoReply(text: string, characterId: string | null, age: string, lang: 
   return (OPENER[characterId ?? ""] ?? "") + body;
 }
 
+/* --------------------------------------------------------------- lessons */
+/** A canned lesson about the requested topic. The live app has the AI model write a real one from the request. */
+function cannedLesson(topic: string, lang: Lang, source: string | null): LessonContent {
+  const ar = lang === "ar";
+  return normalizeLesson(ar ? {
+    objectives: [`أن يفهم الطالب فكرة: ${topic}`, "أن يطبّق الفكرة على مثال بسيط", "أن يشرح بكلماته ما تعلّمه"],
+    warmup: { title: "سؤال افتتاحي", script: `اسأل الطلاب: ماذا تعرفون عن «${topic}»؟ اجمع إجاباتهم على اللوح دون تصحيح.`, minutes: 5 },
+    steps: [
+      { title: "نقدّم الفكرة", explanation: `اشرح الفكرة الرئيسية في «${topic}» بجملتين، ثم اطلب من طالبين إعادتها بكلماتهما.`, board: ["الفكرة الرئيسية", "كلمة جديدة نكتبها"], minutes: 10 },
+      { title: "مثال محلول", explanation: "حلّ مثالاً أمام الطلاب وأنت تفكّر بصوت عالٍ.", board: ["الخطوة 1", "الخطوة 2", "الناتج"], minutes: 10 },
+      { title: "نتدرّب معاً", explanation: "يحلّ الطلاب مثالين في أزواج وأنت تتجوّل بينهم.", board: [], minutes: 10 },
+    ],
+    examples: [{ prompt: "3/8 + 2/8 = ؟", solution: "5/8" }],
+    activities: [{ title: "تمرين الأزواج", mode: "pair", instructions: "يكتب كل طالب سؤالاً لزميله ثم يتبادلان الحل.", minutes: 10 }],
+    quiz: [
+      { q: "1/4 + 2/4 = ؟", options: ["3/8", "3/4", "2/4", "1/2"], answer: 1, explanation: "نجمع البسطين ونُبقي المقام." },
+      { q: "2/5 + 2/5 = ؟", options: ["4/10", "4/5", "2/5", "1/5"], answer: 1, explanation: "المقام لا يتغيّر." },
+      { q: "3/9 + 4/9 = ؟", options: ["7/18", "7/9", "12/9", "1/9"], answer: 1, explanation: "3 + 4 = 7 والمقام 9." },
+    ],
+    differentiation: { support: "استخدم الرسم والأشكال لتمثيل الأجزاء.", extension: "اطلب من الطلاب اختراع مسألة كلامية." },
+    misconceptions: ["جمع المقامين مع بعضهما"],
+    homework: "حلّ ثلاث مسائل من الكتاب.",
+    studentSummary: [`فكرة اليوم: ${topic}.`, "حين يكون المقام واحداً نجمع البسطين فقط."],
+  } : {
+    objectives: [`Understand the idea of: ${topic}`, "Apply it to a simple example", "Explain it in their own words"],
+    warmup: { title: "Opening question", script: `Ask the class: what do you already know about "${topic}"? Collect answers on the board without correcting them.`, minutes: 5 },
+    steps: [
+      { title: "Introduce the idea", explanation: `Explain the main idea of "${topic}" in two sentences, then ask two students to say it back in their own words.`, board: ["The main idea", "A new word to write down"], minutes: 10 },
+      { title: "A worked example", explanation: "Solve one example in front of the class while thinking aloud.", board: ["Step 1", "Step 2", "Answer"], minutes: 10 },
+      { title: "Practise together", explanation: "Students solve two examples in pairs while you walk around.", board: [], minutes: 10 },
+    ],
+    examples: [{ prompt: "3/8 + 2/8 = ?", solution: "5/8" }],
+    activities: [{ title: "Partner challenge", mode: "pair", instructions: "Each student writes a question for their partner, then they swap and solve.", minutes: 10 }],
+    quiz: [
+      { q: "1/4 + 2/4 = ?", options: ["3/8", "3/4", "2/4", "1/2"], answer: 1, explanation: "Add the tops and keep the bottom." },
+      { q: "2/5 + 2/5 = ?", options: ["4/10", "4/5", "2/5", "1/5"], answer: 1, explanation: "The denominator stays the same." },
+      { q: "3/9 + 4/9 = ?", options: ["7/18", "7/9", "12/9", "1/9"], answer: 1, explanation: "3 + 4 = 7 and the bottom is 9." },
+    ],
+    differentiation: { support: "Use drawings and shapes to show the parts.", extension: "Ask students to invent a word problem." },
+    misconceptions: ["Adding the two denominators together"],
+    homework: "Solve three problems from the textbook.",
+    studentSummary: [`Today's idea: ${topic}.`, "When the bottom number is the same, add only the tops."],
+  });
+}
+const lessonOf = (id: string) => { const l = S.lessons.find(x => x.id === id); if (!l) throw new DemoError("NOT_FOUND", "Lesson not found"); return l; };
+const shareOf = (id: string) => { const sh = S.shares.find(x => x.id === id); if (!sh) throw new DemoError("NOT_FOUND", "Shared lesson not found"); return sh; };
+
 /* ------------------------------------------------------------- handlers */
 type Handler = (input: any) => any;
 const H: Record<string, Handler> = {
@@ -174,7 +238,7 @@ const H: Record<string, Handler> = {
   "auth.me": () => S.user,
   "auth.register": ({ email, name, accountType: type, language }) => {
     S.user = { id: "demo-parent", email, name: name ?? null, role: "user", loginMethod: "email", accountType: type ?? "family", language: language ?? null, createdAt: new Date(), lastSignedIn: new Date() };
-    S.profiles = []; S.progress.clear(); S.plays = []; S.badges.clear(); S.moods = []; S.classes = []; S.assignments = [];
+    S.profiles = []; S.progress.clear(); S.plays = []; S.badges.clear(); S.moods = []; S.classes = []; S.assignments = []; S.lessons = []; S.shares = []; S.lessonResults = [];
     if (S.user.accountType === "school") seedSchool(language ?? "en"); else seed();
     return S.user;
   },
@@ -259,6 +323,8 @@ const H: Record<string, Handler> = {
   "classes.delete": ({ classId }) => {
     requireParent(); requireSchool(); const c = klass(classId);
     S.profiles.forEach(p => { if (p.classId === classId) p.classId = null; });
+    const sids = S.shares.filter(x => x.classId === classId).map(x => x.id);
+    S.lessonResults = S.lessonResults.filter(r => !sids.includes(r.shareId)); S.shares = S.shares.filter(x => x.classId !== classId);
     S.assignments = S.assignments.filter(a => a.classId !== classId); S.classes = S.classes.filter(x => x.id !== classId);
     log("class_deleted", c.name); return { success: true };
   },
@@ -284,6 +350,83 @@ const H: Record<string, Handler> = {
     });
     return { class: { id: c.id, name: c.name, grade: c.grade }, ...buildClassOverview(aggregates, open.length, resolvePlayDay(localDay, new Date())) };
   },
+  "lessons.list": () => { requireParent(); requireSchool(); return [...S.lessons].sort((a, b) => +b.updatedAt - +a.updatedAt).map(l => ({ id: l.id, title: l.title, subject: l.subject, grade: l.grade, language: l.language, topic: l.topic, durationMin: l.durationMin, createdAt: l.updatedAt, updatedAt: l.updatedAt, sharedWith: S.shares.filter(x => x.lessonId === l.id && !x.archived).length })); },
+  "lessons.get": ({ lessonId }) => { requireParent(); requireSchool(); const l = lessonOf(lessonId); return { id: l.id, title: l.title, subject: l.subject, grade: l.grade, language: l.language, topic: l.topic, durationMin: l.durationMin, hasSource: !!l.sourceText, content: l.content, updatedAt: l.updatedAt }; },
+  "lessons.generate": ({ subject, grade, topic, durationMin, language, sourceText }) => {
+    requireParent(); requireConsent(); requireSchool();
+    if ((SOURCE_REQUIRED_SUBJECTS as readonly string[]).includes(subject) && (sourceText?.length ?? 0) < MIN_SOURCE_CHARS) throw new DemoError("BAD_REQUEST", "For this subject, paste the textbook passage you are teaching from so the lesson stays faithful to it.");
+    const l: Lesson = { id: uid(), title: topic.slice(0, 200), subject, grade, language, topic, durationMin, sourceText: sourceText ?? null, content: cannedLesson(topic, language, sourceText ?? null), updatedAt: new Date() };
+    S.lessons.push(l); log("lesson_created", topic.slice(0, 100)); return { id: l.id };
+  },
+  "lessons.revise": ({ lessonId, instruction }) => {
+    requireParent(); requireConsent(); requireSchool(); const l = lessonOf(lessonId);
+    const ar = l.language === "ar";
+    if (/short|قصر/i.test(instruction)) l.content = normalizeLesson({ ...l.content, steps: l.content.steps.slice(0, 2), activities: [] });
+    else l.content = normalizeLesson({ ...l.content, quiz: [...l.content.quiz, { q: ar ? "1/6 + 2/6 = ؟" : "1/6 + 2/6 = ?", options: ["3/12", "3/6", "2/6", "1/6"], answer: 1, explanation: ar ? "نجمع البسطين." : "Add the tops." }] });
+    l.updatedAt = new Date(); return { success: true };
+  },
+  "lessons.update": ({ lessonId, title, content }) => {
+    requireParent(); requireConsent(); requireSchool(); const l = lessonOf(lessonId);
+    if (title) l.title = title;
+    if (content !== undefined) { try { l.content = normalizeLesson(content); } catch { throw new DemoError("BAD_REQUEST", "A lesson needs at least one teaching step."); } }
+    l.updatedAt = new Date(); return { success: true };
+  },
+  "lessons.delete": ({ lessonId }) => {
+    requireParent(); requireSchool(); const l = lessonOf(lessonId);
+    const sids = S.shares.filter(x => x.lessonId === l.id).map(x => x.id);
+    S.lessonResults = S.lessonResults.filter(r => !sids.includes(r.shareId)); S.shares = S.shares.filter(x => x.lessonId !== l.id); S.lessons = S.lessons.filter(x => x.id !== l.id);
+    log("lesson_deleted", l.title.slice(0, 100)); return { success: true };
+  },
+  "lessons.share": ({ lessonId, classId, dueDate }) => {
+    requireParent(); requireConsent(); requireSchool(); const l = lessonOf(lessonId); const c = klass(classId);
+    if (l.content.quiz.length === 0) throw new DemoError("BAD_REQUEST", "Add at least one quiz question before sharing this lesson with students.");
+    const open = S.shares.filter(x => x.classId === classId && !x.archived);
+    if (open.some(x => x.lessonId === lessonId)) throw new DemoError("CONFLICT", "This lesson is already shared with that class.");
+    if (open.length >= 10) throw new DemoError("BAD_REQUEST", "A class can have up to 10 shared lessons. Archive one first.");
+    const sh: Share = { id: uid(), lessonId, classId, dueDate: dueDate ?? null, createdAt: new Date(), archived: false };
+    S.shares.push(sh); log("lesson_shared", `${l.title.slice(0, 60)} → ${c.name}`); return { id: sh.id };
+  },
+  "lessons.shares": ({ classId }) => {
+    requireParent(); requireSchool();
+    return S.shares.filter(x => !x.archived && (!classId || x.classId === classId)).map(sh => ({ id: sh.id, lessonId: sh.lessonId, classId: sh.classId, dueDate: sh.dueDate, createdAt: sh.createdAt, lessonTitle: S.lessons.find(l => l.id === sh.lessonId)?.title ?? "", className: S.classes.find(c => c.id === sh.classId)?.name ?? "" }));
+  },
+  "lessons.archiveShare": ({ shareId }) => { requireParent(); requireSchool(); shareOf(shareId).archived = true; return { success: true }; },
+  "lessons.results": ({ shareId }) => {
+    requireParent(); requireSchool(); const sh = shareOf(shareId); const l = lessonOf(sh.lessonId);
+    const students = S.profiles.filter(p => p.classId === sh.classId);
+    const graded = S.lessonResults.filter(r => r.shareId === shareId).map(r => ({ profileId: r.profileId, ...gradeQuiz(l.content.quiz, r.answers) }));
+    return {
+      lessonTitle: l.title, studentCount: students.length, doneCount: graded.length,
+      questions: l.content.quiz.map((q, i) => ({ q: q.q, percentCorrect: graded.length ? Math.round((graded.filter(g => g.perQuestion[i]).length / graded.length) * 100) : null })),
+      students: students.map(st => { const g = graded.find(x => x.profileId === st.id); return { profileId: st.id, childName: st.childName, correct: g?.correct ?? null, total: g?.total ?? l.content.quiz.length }; }),
+    };
+  },
+  "assistant.ask": ({ messages, language }) => {
+    requireParent(); requireConsent(); requireSchool();
+    const last = String(messages[messages.length - 1]?.content ?? "");
+    return { reply: language === "ar"
+      ? `اقتراح تجريبي: ابدأ بمثال من حياة الطلاب اليومية، ثم اطلب منهم تفسيره بكلماتهم. (ردّ تجريبي: في التطبيق الحقيقي يجيب المساعد عن سؤالك «${last.slice(0, 60)}» بالذكاء الاصطناعي.)`
+      : `Preview suggestion: start with an example from the students' everyday life, then ask them to explain it in their own words. (Preview reply: in the live app the companion answers "${last.slice(0, 60)}" with the AI model.)` };
+  },
+  "studentLessons.get": ({ profileId, shareId }) => {
+    requireConsent(); const p = profile(profileId); const sh = shareOf(shareId);
+    if (sh.archived || sh.classId !== p.classId) throw new DemoError("NOT_FOUND", "Lesson not found");
+    const l = lessonOf(sh.lessonId); const r = S.lessonResults.find(x => x.shareId === shareId && x.profileId === profileId);
+    return { title: l.title, subject: l.subject, language: l.language, ...studentView(l.content), result: r ? { correct: r.correct, total: r.total } : null };
+  },
+  "studentLessons.submit": ({ profileId, shareId, answers, localDay }) => {
+    requireConsent(); const p = profile(profileId); const sh = shareOf(shareId);
+    if (sh.archived || sh.classId !== p.classId) throw new DemoError("NOT_FOUND", "Lesson not found");
+    const l = lessonOf(sh.lessonId);
+    if (answers.length !== l.content.quiz.length) throw new DemoError("BAD_REQUEST", "Answer every question.");
+    const g = gradeQuiz(l.content.quiz, answers);
+    const review = l.content.quiz.map((q, i) => ({ correctAnswer: q.answer, explanation: q.explanation, right: g.perQuestion[i] }));
+    const first = S.lessonResults.find(x => x.shareId === shareId && x.profileId === profileId);
+    if (first) return { already: true, correct: first.correct, total: first.total, review, xpEarned: 0, xp: null, leveledUp: false, newBadges: [] };
+    S.lessonResults.push({ shareId, profileId, answers, correct: g.correct, total: g.total });
+    const out = recordPlay(profileId, "quiz", 1, g.correct, g.total, resolvePlayDay(localDay, new Date()));
+    return { already: false, correct: g.correct, total: g.total, review, xpEarned: out.xpEarned, xp: out.xp, leveledUp: out.leveledUp, newBadges: named(out.newBadges) };
+  },
   "assignments.list": ({ classId }) => {
     requireParent(); requireSchool(); klass(classId);
     const ids = S.profiles.filter(p => p.classId === classId).map(p => p.id);
@@ -306,6 +449,7 @@ const H: Record<string, Handler> = {
     const sids = S.sessions.filter(s => s.profileId === profileId).map(s => s.id);
     S.messages = S.messages.filter(m => !sids.includes(m.sessionId)); S.sessions = S.sessions.filter(s => s.profileId !== profileId);
     S.plays = S.plays.filter(x => x.profileId !== profileId); S.moods = S.moods.filter(m => m.profileId !== profileId);
+    S.lessonResults = S.lessonResults.filter(r => r.profileId !== profileId);
     S.progress.delete(profileId); S.badges.delete(profileId); S.profiles = S.profiles.filter(x => x.id !== profileId);
     log("profile_deleted", p.childName); return { success: true };
   },
@@ -437,6 +581,13 @@ function seedSchool(lang: Lang) {
   S.moods.push({ profileId: "p-s6", mood: "happy", note: null, flagged: "safe", createdAt: d(1) });
   S.assignments.push({ id: "a-1", classId: cls.id, game: "math", level: 1, note: lang === "ar" ? "حاولوا أن تحصلوا على 8 من 10" : "Try to get 8 out of 10", dueDate: null, createdAt: d(3), archived: false });
   names.forEach((_, i) => award(`p-s${i}`));
+  // One sample lesson, already shared, with results from five students (made-up), so the Results panel is not empty.
+  const topic = lang === "ar" ? "جمع الكسور ذات المقام الواحد" : "Adding fractions with the same denominator";
+  const lesson: Lesson = { id: "l-1", title: topic, subject: "math", grade: 4, language: lang, topic, durationMin: 45, sourceText: null, content: cannedLesson(topic, lang, null), updatedAt: d(1) };
+  S.lessons.push(lesson);
+  S.shares.push({ id: "sh-1", lessonId: lesson.id, classId: cls.id, dueDate: null, createdAt: d(1), archived: false });
+  const picks: number[][] = [[1, 1, 1], [1, 1, 0], [1, 0, 1], [1, 1, 1], [0, 1, 0]];
+  picks.forEach((answers, i) => { const g = gradeQuiz(lesson.content.quiz, answers); S.lessonResults.push({ shareId: "sh-1", profileId: `p-s${i}`, answers, correct: g.correct, total: g.total }); });
 }
 
 /* ---------------------------------------------------------------- fetch */
