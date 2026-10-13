@@ -4,6 +4,7 @@
  * outside Claude, consent declined, offline) every function returns null and the caller falls back to canned replies.
  */
 import { buildSystemPrompt, lessonHelpRule, normalizeSearch, searchSystemPrompt, searchText, type SearchResult } from "../../../server/prompts";
+import { insightsSystemPrompt, letterSystemPrompt, normalizeInsights, type Insights } from "../../../server/lessonPrompts";
 import { assistantSystemPrompt, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "../../../server/lessonPrompts";
 import { languageRule } from "../../../server/prompts";
 import { normalizeLesson, studentFacingText, type LessonContent } from "@shared/lesson";
@@ -152,4 +153,14 @@ export async function aiExtractText(imageBase64: string): Promise<string | null>
     const text = out.text.trim();
     return !text || text === "NO_TEXT" ? "" : text;
   } catch { return null; }
+}
+
+export async function aiInsights(facts: unknown, language: Lang): Promise<Insights | null> {
+  const out = await ask(`${insightsSystemPrompt(language)}\n\n${JSON.stringify(facts)}`, { modelTier: "default" });
+  if (!out) return null;
+  try { return normalizeInsights(JSON.parse(jsonish(out))); } catch { return null; }
+}
+
+export async function aiLetter(lines: string[], language: Lang, kind: "student" | "class"): Promise<string | null> {
+  return ask(`${letterSystemPrompt(language, kind)}\n\nFacts:\n- ${lines.join("\n- ")}`, { modelTier: "default" });
 }

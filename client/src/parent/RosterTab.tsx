@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ const SKIP_REASONS: Record<string, string> = {
 };
 
 type Student = { id: string; childName: string; ageGroup: string; classId: string | null };
-type Cls = { id: string; name: string; grade: number; studentCount: number };
+type Cls = { id: string; name: string; grade: number; studentCount: number; controls: { chat: boolean; search: boolean; focus: boolean } };
 
 function CreateClass({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
@@ -42,6 +42,32 @@ function CreateClass({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** Switches a teacher can flip during the day. Chat and search can be turned off; focus mode shows only what the teacher set. */
+function Controls({ cls, onChanged }: { cls: Cls; onChanged: () => void }) {
+  const set = trpc.classes.setControls.useMutation({ onSuccess: onChanged, onError: () => setC(cls.controls) });
+  // Shown at once; the saved value replaces it when the list reloads (and it snaps back if saving fails).
+  const [c, setC] = useState(cls.controls);
+  useEffect(() => setC(cls.controls), [cls.controls.chat, cls.controls.search, cls.controls.focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  const flip = (patch: Partial<Cls["controls"]>) => { const next = { ...c, ...patch }; setC(next); set.mutate({ classId: cls.id, ...next }); };
+  const rows: Array<[keyof Cls["controls"], string, string]> = [
+    ["chat", t("Chat with the guide"), t("Students can ask the guide anything. Help with a lesson you shared stays on.")],
+    ["search", t("Safe Search"), t("Students can look things up. Every search is saved for you to read.")],
+    ["focus", t("Focus mode"), t("Students see only their lessons and the activities you set. Chat, search, stories, drawing and pets are hidden.")],
+  ];
+  return (
+    <fieldset className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-3" disabled={set.isPending}>
+      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{t("Controls for this class")}</legend>
+      {rows.map(([key, label, hint]) => (
+        <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1 h-4 w-4" checked={c[key]} onChange={e => flip({ [key]: e.target.checked })} />
+          <span><span className="block font-medium">{label}</span><span className="block text-xs text-gray-600">{hint}</span></span>
+        </label>
+      ))}
+      {set.error && <p className="text-sm text-red-600 sm:col-span-3" role="alert">{t(set.error.message)}</p>}
+    </fieldset>
+  );
+}
+
 function ClassRow({ cls, onChanged }: { cls: Cls; onChanged: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const del = trpc.classes.delete.useMutation({ onSuccess: onChanged });
@@ -51,6 +77,7 @@ function ClassRow({ cls, onChanged }: { cls: Cls; onChanged: () => void }) {
         <div><p className="font-semibold">{cls.name}</p><p className="text-sm text-gray-600">{gradeLabel(cls.grade)} · {t("{n} students", { n: cls.studentCount })}</p></div>
         <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>{t("Delete class")}</Button>
       </div>
+      <Controls cls={cls} onChanged={onChanged} />
       {confirming && (
         <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm space-y-2" role="alertdialog" aria-label={t("Delete {name}", { name: cls.name })}>
           <p className="text-red-900">{t("This removes the class and its activities. The students stay in your list, without a class.")}</p>

@@ -54,6 +54,8 @@ export const chatMessages = mysqlTable("chatMessages", {
   // Millisecond precision so a reply never ties with the message it answers.
   createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
   flagged: mysqlEnum("flagged", ["safe", "review", "blocked"]).default("safe"),
+  // Set when a teacher or parent has looked at a flagged message and dealt with it.
+  reviewedAt: timestamp("reviewedAt", { fsp: 3 }),
 });
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
@@ -621,6 +623,10 @@ export const schoolClasses = mysqlTable("school_classes", {
   userId: varchar("userId", { length: 64 }).notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   grade: int("grade").notNull(),
+  // Teacher controls. Chat and search can be switched off; focus mode shows students only the lessons and activities set for them.
+  chatEnabled: boolean("chatEnabled").notNull().default(true),
+  searchEnabled: boolean("searchEnabled").notNull().default(true),
+  focusMode: boolean("focusMode").notNull().default(false),
   createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
 });
 

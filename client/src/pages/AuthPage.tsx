@@ -97,6 +97,15 @@ export default function AuthPage() {
               {mode === "login" ? t("New here? Create an account") : t("Already have an account? Sign in")}
             </button>
           </form>
+          {import.meta.env.VITE_DEMO && (
+            <div className="mt-5 space-y-2 border-t pt-4 text-center">
+              <p className="text-sm text-gray-600">{t("Just looking? Skip the form:")}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" disabled={busy} onClick={() => register.mutate({ email: "teacher@demo-school.example", password: "demo-password", accountType: "school", language: lang })}>🏫 {t("See the school demo")}</Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => register.mutate({ email: "parent@demo-family.example", password: "demo-password", accountType: "family", language: lang })}>🏠 {t("See the family demo")}</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

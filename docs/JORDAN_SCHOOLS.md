@@ -17,6 +17,20 @@ Decisions made with the owner: **private schools first**; first Arabic content b
 | Activities | A teacher assigns a game and level to a class (optional note and due date). Students see it on their home screen; it counts as done when they finish that game at that level or higher after it was set. | `client/src/parent/AssignmentsTab.tsx` |
 | Teacher PIN | Same server-side PIN lock as the parent area, so students on a shared device cannot open the teacher area. | `server/_core/trpc.ts` |
 
+### For the school (safety, control, reporting)
+
+| Area | What exists | Where |
+|---|---|---|
+| Safety inbox | Every flagged chat message or search, ranked (self-harm and "someone is hurting me" first), with student, class, a suggested next step and a "reviewed" mark; unread badge on the tab. The reason is re-derived from the local safety rules; the stored flag does not say why, so a message flagged only by the AI classifier shows as "flagged by the safety check". | `shared/safetyInbox.ts`, `server/routers.ts` (`safety`), `client/src/parent/SafetyTab.tsx` |
+| Class controls | Per class: free chat on/off, Safe Search on/off, focus mode (students see only lessons, set activities and the mood check-in). Enforced on the server for chat and search (help with a shared lesson stays available); the other hidden screens are hidden by the app, not blocked by the server. | `school_classes` columns, `controlsFor` in `server/routers.ts` |
+| Re-teach insights | Per shared lesson: hardest questions, the wrong answer most picked, who may need support or a challenge (computed locally), and an AI-written re-teach plan. The AI gets question text and counts only, never names. Needs 3 results. | `shared/insights.ts`, `lessons.insights` |
+| Notes to parents | AI-drafted weekly class update or a note about one student, Arabic or English; facts only, no names or moods sent to the AI (name filled in afterwards), teacher edits, copy or print. Printable per-student progress report for parent meetings. | `letters.draft`, `classes.studentReport` |
+| School overview | Students, weekly activity (8 weeks), lessons shared, quiz averages, check-ins needed, safety flags, by-class table, one-page printable report with "what these numbers mean". Covers the classes of the signed-in account only. | `shared/schoolReport.ts`, `school.overview` |
+| Getting started | A four-step checklist ticked from real data; disappears when done. | `client/src/parent/GettingStarted.tsx` |
+| iPad install | Web app manifest and home-screen meta tags, so the page can be added to the iPad home screen and opens full screen. No offline mode. | `client/public/manifest.webmanifest` |
+
+How to pitch and pilot this: `docs/SCHOOL_PILOT_KIT.md`.
+
 ### Teacher companion (lessons)
 
 The teacher area also works as a companion for teaching, not only for tracking.
@@ -41,7 +55,7 @@ Class progress comes from game results the **app itself counts** (the browser re
 
 ## How it was checked
 
-- 160 automated tests, including: Arabic generator correctness over hundreds of seeds, Arabic safety rules, an i18n coverage test (every string passed to `t()`/`T()`, shared data, and server error messages must have an Arabic entry with matching `{placeholders}`), class overview maths, roster parsing, and school API permission tests.
+- 209 automated tests, including: Arabic generator correctness over hundreds of seeds, Arabic safety rules, an i18n coverage test (every string passed to `t()`/`T()`, shared data, and server error messages must have an Arabic entry with matching `{placeholders}`), class overview maths, roster parsing, and school API permission tests.
 - Scripted browser runs (Playwright) in Arabic at phone and desktop width: no horizontal overflow on any page checked, equations isolated left-to-right, spelling clue mode, Arabic safety reply, language switch at runtime.
 - A school flow run against a **real MariaDB database and the real server**: register as a school, school consent row (version, language, text hash), class creation, roster import (duplicate, phone number and email skipped), assignment stored, student plays an Arabic maths round and it is saved against that student, teacher sees it, CSV has a BOM and Arabic headers, a second school account cannot see or read any of it (HTTP 403), deleting a class keeps the students, deleting the account leaves zero rows.
 - The lesson flow against the real database and server, driven in a browser: Arabic lesson draft, Islamic-education refusal without a passage, passage stored and sent to the model, teach mode across all slides with keyboard control and reveal, hand edit that drops an incomplete question, AI rewrite, share with a class, a student reading it (no answers or teacher notes visible), server-side grading (3 of 4), first-attempt-only XP, teacher results (per question and per student), companion chat not stored, another account blocked (HTTP 403), delete cascade.

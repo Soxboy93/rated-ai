@@ -115,7 +115,7 @@ describe("classes", () => {
   it("lists classes with student counts without needing the PIN (the picker uses it)", async () => {
     store.listProfiles.mockResolvedValue([{ id: "s1", classId: "c1" }, { id: "s2", classId: "c1" }, { id: "s3", classId: null }]);
     const out = await (await caller()).api.classes.list();
-    expect(out).toEqual([{ id: "c1", name: "Grade 5A", grade: 5, studentCount: 2 }]);
+    expect(out).toEqual([{ id: "c1", name: "Grade 5A", grade: 5, studentCount: 2, controls: { chat: true, search: true, focus: false } }]);
   });
 
   it("builds the overview from the aggregates and flags students who need attention", async () => {

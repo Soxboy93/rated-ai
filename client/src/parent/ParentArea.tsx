@@ -14,6 +14,10 @@ import RosterTab from "./RosterTab";
 import AssignmentsTab from "./AssignmentsTab";
 import LessonsTab from "./LessonsTab";
 import CompanionChat from "./CompanionChat";
+import SafetyTab from "./SafetyTab";
+import LettersTab from "./LettersTab";
+import SchoolTab from "./SchoolTab";
+import GettingStarted from "./GettingStarted";
 import { useA11y } from "@/kid/Accessibility";
 import { t, T, fmtDateTime, fmtTime } from "@/i18n";
 import LanguageSwitch from "@/i18n/LanguageSwitch";
@@ -27,10 +31,13 @@ const FAMILY_TABS = [
 ] as const;
 const SCHOOL_TABS = [
   ["class", T("Class progress")],
+  ["overview", T("School overview")],
   ["lessons", T("Lessons")],
   ["companion", T("Companion")],
   ["roster", T("Classes and students")],
   ["assign", T("Activities")],
+  ["letters", T("Parent notes")],
+  ["safety", T("Safety")],
   ["chats", T("Conversations")],
   ["privacy", T("Privacy")],
   ["display", T("Display")],
@@ -166,6 +173,7 @@ export default function ParentArea() {
   const { data: status, isLoading } = trpc.parent.status.useQuery();
   const [tab, setTab] = useState<Tab>(school ? "class" : "progress");
   const lock = trpc.parent.lock.useMutation({ onSuccess: async () => { await utils.parent.invalidate(); } });
+  const inbox = trpc.safety.inbox.useQuery(undefined, { enabled: school && !!status?.unlocked });
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center text-gray-500">{t("Loading…")}</div>;
   if (!status?.unlocked) return <PinGate hasPin={!!status?.hasPin} school={school} />;
@@ -193,17 +201,22 @@ export default function ParentArea() {
             <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
               className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${tab === id ? "border-teal-700 text-teal-800" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
               {t(label)}
+              {id === "safety" && !!inbox.data?.open && <span className={`ms-1 rounded-full px-1.5 text-xs font-semibold text-white ${inbox.data.urgentOpen ? "bg-red-600" : "bg-amber-600"}`} aria-label={t("{n} to review", { n: inbox.data.open })}>{inbox.data.open}</span>}
             </button>
           ))}
         </nav>
       </header>
       <main className="container mx-auto max-w-5xl space-y-6 px-4 py-6">
+        {school && tab === "class" && <GettingStarted go={setTab} />}
         {tab === "progress" && <ProgressTab />}
         {tab === "class" && <ClassTab />}
+        {tab === "overview" && <SchoolTab />}
         {tab === "lessons" && <LessonsTab />}
         {tab === "companion" && <CompanionChat />}
         {tab === "roster" && <RosterTab />}
         {tab === "assign" && <AssignmentsTab />}
+        {tab === "letters" && <LettersTab />}
+        {tab === "safety" && <SafetyTab />}
         {tab === "chats" && <ConversationsTab school={school} />}
         {tab === "family" && <FamilyPanel />}
         {tab === "privacy" && <PrivacyPanel school />}

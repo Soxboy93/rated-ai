@@ -6,6 +6,7 @@ import {
   MOODS,
   badgeById,
   effectiveStreak,
+  levelFromXp,
   levelProgress,
   levelTitle,
   resolvePlayDay,
@@ -51,9 +52,12 @@ import {
   router,
 } from "./_core/trpc";
 import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt, languageRule, lessonHelpRule, normalizeSearch, searchJsonSchema, searchSystemPrompt, searchText } from "./prompts";
-import { assistantSystemPrompt, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "./lessonPrompts";
+import { analyzeResults, insightFacts, MIN_RESULTS_FOR_INSIGHT } from "@shared/insights";
+import { assistantSystemPrompt, insightsJsonSchema, insightsSystemPrompt, letterSystemPrompt, normalizeInsights, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "./lessonPrompts";
 import { lessonJsonSchema, LESSON_SUBJECTS, MAX_SOURCE_CHARS, MIN_SOURCE_CHARS, SOURCE_REQUIRED_SUBJECTS, gradeQuiz, normalizeLesson, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
 import { safeFallbackReply, screenText, screenWithProvider } from "./safety";
+import { buildSchoolOverview } from "@shared/schoolReport";
+import { sortInbox, urgencyOf, type InboxItem } from "@shared/safetyInbox";
 
 const MAX_CHAT_MESSAGE_CHARS = 2000;
 const MAX_HISTORY_MESSAGES = 20;
@@ -126,6 +130,37 @@ function assertNameAllowed(name: string) {
   }
 }
 
+/** Everything a parent-meeting report or a note home may say about one student. No moods and no safety flags, ever. */
+async function loadStudentReport(profile: { id: string; childName: string; classId: string | null }, userId: string) {
+  if (!profile.classId) throw new TRPCError({ code: "BAD_REQUEST", message: "Add this student to a class first." });
+  const [progress, breakdown, lessons, assignments, badges, cls] = await Promise.all([
+    db.getChildProgress(profile.id), db.getGameBreakdown(profile.id), db.listStudentLessons(profile.classId, profile.id), db.listAssignments(userId, profile.classId), db.listBadges(profile.id), db.getClass(profile.classId),
+  ]);
+  const plays = breakdown.reduce((n, g) => n + g.plays, 0);
+  const right = breakdown.reduce((n, g) => n + g.correct, 0);
+  const asked = breakdown.reduce((n, g) => n + g.total, 0);
+  const done = (await Promise.all(assignments.map(a => db.assignmentCompletions(a, [profile.id])))).filter(set => set.has(profile.id)).length;
+  return {
+    name: profile.childName, className: cls?.name ?? "", grade: cls?.grade ?? null,
+    level: levelFromXp(progress?.xp ?? 0), xp: progress?.xp ?? 0, streakDays: progress?.streakDays ?? 0, longestStreak: progress?.longestStreak ?? 0,
+    totalPlays: plays, accuracyPercent: asked > 0 ? Math.round((right / asked) * 100) : null,
+    byGame: breakdown.filter(g => g.total > 0).map(g => ({ game: g.game, plays: g.plays, answers: g.total, accuracyPercent: Math.round((g.correct / g.total) * 100) })),
+    lessons: lessons.map(l => ({ title: l.title, subject: l.subject, correct: l.result?.correct ?? null, total: l.result?.total ?? null })),
+    activities: { done, total: assignments.length }, badges: badges.length,
+  };
+}
+
+export type ClassControls = { chat: boolean; search: boolean; focus: boolean };
+const OPEN_CONTROLS: ClassControls = { chat: true, search: true, focus: false };
+
+/** What the teacher has switched on for a student's class. A student with no class (a family account) is never restricted. */
+async function controlsFor(classId: string | null | undefined): Promise<ClassControls> {
+  if (!classId) return OPEN_CONTROLS;
+  const cls = await db.getClass(classId);
+  return cls ? { chat: cls.chatEnabled !== false, search: cls.searchEnabled !== false, focus: cls.focusMode === true } : OPEN_CONTROLS;
+}
+const TURNED_OFF = "Your teacher has turned this off for now.";
+
 /** Everything the kid UI needs to draw a child's progress. */
 async function progressSnapshot(profileId: string, clientDay?: string) {
   const today = resolvePlayDay(clientDay, new Date());
@@ -147,7 +182,9 @@ async function progressSnapshot(profileId: string, clientDay?: string) {
   ]);
   const xp = row?.xp ?? 0;
   const lp = levelProgress(xp);
+  const controls = await controlsFor(profileRow?.classId);
   return {
+    controls,
     xp,
     level: lp.level,
     title: levelTitle(lp.level),
@@ -377,6 +414,11 @@ export const appRouter = router({
         const session = await requireOwnedSession(input.sessionId, ctx.user.id);
         checkRateLimit(`chat:${ctx.user.id}`, 20, 60 * 1000);
         const lessonContext = input.shareId ? await lessonHelpContext(input.shareId, session.profileId, ctx.user.id) : undefined;
+        // Free chat can be switched off for a class. Help with a lesson the teacher shared stays available.
+        if (!input.shareId && session.profileId) {
+          const profile = await db.getProfile(session.profileId);
+          if (!(await controlsFor(profile?.classId)).chat) throw new TRPCError({ code: "FORBIDDEN", message: TURNED_OFF });
+        }
 
         const lang: Lang = session.language === "ar" ? "ar" : "en";
         const verdict = await screenWithProvider(input.message, lang);
@@ -450,6 +492,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
         checkRateLimit(`search:${ctx.user.id}`, 20, 60 * 1000);
+        if (!(await controlsFor(profile.classId)).search) throw new TRPCError({ code: "FORBIDDEN", message: TURNED_OFF });
         const lang: Lang = input.language;
         let sessionId = input.sessionId;
         if (sessionId) {
@@ -1168,8 +1211,19 @@ export const appRouter = router({
     // Not PIN-locked: the student picker filters by class.
     list: protectedProcedure.query(async ({ ctx }) => {
       const [classes, profiles] = await Promise.all([db.listClasses(ctx.user.id), db.listProfiles(ctx.user.id)]);
-      return classes.map(c => ({ id: c.id, name: c.name, grade: c.grade, studentCount: profiles.filter(p => p.classId === c.id).length }));
+      return classes.map(c => ({ id: c.id, name: c.name, grade: c.grade, studentCount: profiles.filter(p => p.classId === c.id).length, controls: { chat: c.chatEnabled !== false, search: c.searchEnabled !== false, focus: c.focusMode === true } }));
     }),
+
+    // Teacher controls for a class: chat and search on/off, and focus mode (students see only what was set for them).
+    setControls: consentedParentProcedure
+      .input(z.object({ classId: z.string().max(64), chat: z.boolean(), search: z.boolean(), focus: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        const cls = await requireOwnedClass(input.classId, ctx.user.id);
+        await db.updateClass(cls.id, { chatEnabled: input.chat, searchEnabled: input.search, focusMode: input.focus });
+        await db.logAudit(ctx.user.id, "class_controls", `${cls.name}: chat ${input.chat ? "on" : "off"}, search ${input.search ? "on" : "off"}, focus ${input.focus ? "on" : "off"}`);
+        return { success: true };
+      }),
 
     create: consentedParentProcedure
       .input(z.object({ name: z.string().trim().min(1).max(100), grade: z.number().int().min(1).max(12) }))
@@ -1218,6 +1272,67 @@ export const appRouter = router({
           ...buildClassOverview(aggregates, assignments.length, resolvePlayDay(input.localDay, new Date())),
         };
       }),
+
+    // One student's progress for a parent meeting. Real numbers only: no moods, no safety flags, no AI.
+    studentReport: parentProcedure.input(z.object({ profileId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+      return loadStudentReport(profile, ctx.user.id);
+    }),
+  }),
+
+  // The school-wide picture for a head teacher or an impact report. Real counts only; no AI.
+  school: router({
+    overview: parentProcedure.input(z.object({ localDay: z.string().max(10).optional() }).optional()).query(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const now = new Date();
+      const today = resolvePlayDay(input?.localDay, now);
+      const [classes, profiles, shares, quizRows, flagged] = await Promise.all([db.listClasses(ctx.user.id), db.listProfiles(ctx.user.id), db.listLessonShares(ctx.user.id), db.listAllLessonResultRows(ctx.user.id), db.listFlaggedMessages(ctx.user.id, 1000)]);
+      const rows = await Promise.all(classes.map(async c => {
+        const kids = profiles.filter(p => p.classId === c.id);
+        const assignments = await db.listAssignments(ctx.user.id, c.id);
+        const aggregates = await db.getStudentAggregates(kids, assignments);
+        const ov = buildClassOverview(aggregates, assignments.length, today, now);
+        const plays = aggregates.flatMap(a => Object.values(a.plays));
+        return { id: c.id, name: c.name, grade: c.grade, students: kids.length, activeThisWeek: ov.summary.activeThisWeek, plays: ov.summary.totalPlays, correct: plays.reduce((n, p) => n + (p?.correct ?? 0), 0), asked: plays.reduce((n, p) => n + (p?.total ?? 0), 0), needAttention: ov.summary.attentionCount };
+      }));
+      const since = new Date(now.getTime() - 8 * 7 * 86_400_000);
+      const days = await db.getPlayDayCounts(profiles.filter(p => p.classId).map(p => p.id), since);
+      const monthAgo = now.getTime() - 30 * 86_400_000;
+      const recent = flagged.filter(m => (m.role === "user" || m.flagged === "blocked") && m.createdAt && +new Date(m.createdAt) >= monthAgo);
+      return buildSchoolOverview({
+        now, classes: rows, shares, quizRows, days, today,
+        safety: { flaggedLast30Days: recent.length, open: recent.filter(m => !m.reviewedAt).length, reviewed: recent.filter(m => m.reviewedAt).length },
+      });
+    }),
+  }),
+
+  // The safety inbox: every flagged message in the account's chats and searches, ranked, with the student's name and class.
+  safety: router({
+    inbox: parentProcedure.query(async ({ ctx }) => {
+      const [rows, profiles, classes] = await Promise.all([db.listFlaggedMessages(ctx.user.id), db.listProfiles(ctx.user.id), db.listClasses(ctx.user.id)]);
+      const items: InboxItem[] = rows
+        .filter(r => r.role === "user" || r.flagged === "blocked")
+        .map(r => {
+          const profile = profiles.find(p => p.id === r.profileId);
+          const child = r.role === "user";
+          // The stored flag does not say why, so name the reason by re-running the local rules on the child's own words.
+          const category = child ? screenText(r.content.replace(/^🔎\s*/, ""), r.language === "ar" ? "ar" : "en").category ?? "other" : "other";
+          return {
+            id: r.id, sessionId: r.sessionId, studentId: r.profileId ?? null, studentName: profile?.childName ?? r.childName ?? "",
+            className: classes.find(c => c.id === profile?.classId)?.name ?? null, content: r.content, from: child ? "child" : "reply",
+            level: r.flagged === "blocked" ? "blocked" : "review", category, urgency: urgencyOf(category), createdAt: r.createdAt, reviewedAt: r.reviewedAt,
+          } as InboxItem;
+        });
+      const sorted = sortInbox(items);
+      return { items: sorted, open: sorted.filter(i => !i.reviewedAt).length, urgentOpen: sorted.filter(i => !i.reviewedAt && i.urgency === "urgent").length };
+    }),
+
+    review: parentProcedure.input(z.object({ messageId: z.string().max(64), reviewed: z.boolean() })).mutation(async ({ ctx, input }) => {
+      if (!(await db.setMessageReviewed(ctx.user.id, input.messageId, input.reviewed))) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      await db.logAudit(ctx.user.id, input.reviewed ? "safety_reviewed" : "safety_reopened", input.messageId.slice(0, 40));
+      return { success: true };
+    }),
   }),
 
   assignments: router({
@@ -1461,6 +1576,77 @@ export const appRouter = router({
         }),
       };
     }),
+
+    // What the class got wrong and a short re-teach plan. The AI sees question texts and counts only, never a student's name.
+    insights: consentedParentProcedure.input(z.object({ shareId: z.string().max(64) })).mutation(async ({ ctx, input }) => {
+      requireSchool(ctx.user);
+      const sh = await db.getLessonShare(input.shareId);
+      if (!sh || sh.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND", message: "Shared lesson not found" });
+      const [lesson, students, results] = await Promise.all([requireOwnedLesson(sh.lessonId, ctx.user.id), db.listClassProfiles(ctx.user.id, sh.classId), db.listLessonResults(sh.id)]);
+      const content = parseContent(lesson.content);
+      const analysis = analyzeResults(content.quiz, results.map(r => { let answers: number[] = []; try { answers = JSON.parse(r.answers); } catch { /* keep empty */ } return { profileId: r.profileId, answers }; }), students.map(s => ({ id: s.id, childName: s.childName })));
+      const groups = { needsSupport: analysis.needsSupport.map(s => s.childName), readyForMore: analysis.readyForMore.map(s => s.childName), notYetTaken: analysis.notYetTaken.map(s => s.childName) };
+      const base = { taken: analysis.taken, classSize: analysis.classSize, averagePercent: analysis.averagePercent, hardQuestions: analysis.hard.map(q => ({ index: q.index, q: q.q, percentCorrect: q.percentCorrect, topWrong: q.topWrong ? { text: q.options[q.topWrong.option], count: q.topWrong.count } : null })), ...groups };
+      if (analysis.taken < MIN_RESULTS_FOR_INSIGHT) return { ...base, enough: false as const, insights: null };
+      checkRateLimit(`lesson-insights:${ctx.user.id}`, 10, 60 * 60 * 1000);
+      const lang: Lang = lesson.language === "ar" ? "ar" : "en";
+      const strict = ENV.llmProvider === "anthropic" || process.env.LLM_JSON_SCHEMA === "1";
+      const response = await llm({
+        task: "assistant",
+        messages: [{ role: "system", content: insightsSystemPrompt(lang) }, { role: "user", content: JSON.stringify(insightFacts(lesson, analysis)) }],
+        response_format: strict ? { type: "json_schema", json_schema: { name: "class_insights", schema: insightsJsonSchema as unknown as Record<string, unknown>, strict: true } } : { type: "json_object" },
+      });
+      try { return { ...base, enough: true as const, insights: normalizeInsights(JSON.parse(textOf(response).replace(/^```(?:json)?\s*|\s*```$/g, ""))) }; }
+      catch { throw unreadable(); }
+    }),
+  }),
+
+  // Notes to parents. The AI is given facts and tokens, never a child's name; the name is filled in here. The teacher edits before sending.
+  letters: router({
+    draft: consentedParentProcedure
+      .input(z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("student"), profileId: z.string().max(64), language: langSchema, note: z.string().trim().max(300).optional() }),
+        z.object({ kind: z.literal("class"), classId: z.string().max(64), language: langSchema, note: z.string().trim().max(300).optional() }),
+      ]))
+      .mutation(async ({ ctx, input }) => {
+        requireSchool(ctx.user);
+        checkRateLimit(`letters:${ctx.user.id}`, 40, 60 * 60 * 1000);
+        const lines: string[] = [];
+        let studentName = "";
+        if (input.kind === "student") {
+          const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+          const r = await loadStudentReport(profile, ctx.user.id);
+          studentName = profile.childName;
+          lines.push(`Child's level: ${r.level}; current practice streak: ${r.streakDays} days`);
+          lines.push(r.totalPlays ? `Practice games played: ${r.totalPlays}; answers right: ${r.accuracyPercent ?? 0}%` : "Has not played any practice games yet");
+          for (const g of r.byGame.filter(g => g.answers >= 10)) lines.push(`${g.game}: ${g.accuracyPercent}% right over ${g.answers} answers`);
+          for (const l of r.lessons) lines.push(l.correct !== null ? `Lesson "${l.title}": quiz ${l.correct} of ${l.total}` : `Lesson "${l.title}": quiz not taken yet`);
+          if (r.activities.total) lines.push(`Class activities completed: ${r.activities.done} of ${r.activities.total}`);
+        } else {
+          const cls = await requireOwnedClass(input.classId, ctx.user.id);
+          const [profiles, assignments, shares, lessons] = await Promise.all([db.listClassProfiles(ctx.user.id, cls.id), db.listAssignments(ctx.user.id, cls.id), db.listLessonShares(ctx.user.id, cls.id), db.listLessons(ctx.user.id)]);
+          const overview = buildClassOverview(await db.getStudentAggregates(profiles, assignments), assignments.length, resolvePlayDay(undefined, new Date()));
+          lines.push(`Class: grade ${cls.grade}, ${profiles.length} students, ${overview.summary.activeThisWeek} practised this week`);
+          for (const sh of shares.slice(0, 5)) {
+            const lesson = lessons.find(l => l.id === sh.lessonId); if (!lesson) continue;
+            const full = await db.getLesson(lesson.id); if (!full) continue;
+            const content = parseContent(full.content);
+            const a = analyzeResults(content.quiz, (await db.listLessonResults(sh.id)).map(r => { let answers: number[] = []; try { answers = JSON.parse(r.answers); } catch { /* keep empty */ } return { profileId: r.profileId, answers }; }), []);
+            lines.push(`Lesson shared: "${lesson.title}"${a.averagePercent !== null ? `; class average ${a.averagePercent}% on the quiz` : "; no quiz results yet"}`);
+          }
+          if (assignments.length) lines.push(`Class activities set: ${assignments.length}`);
+        }
+        if (lines.length === 0) lines.push("There is not much to report yet.");
+        if (input.note) lines.push(`The teacher wants to add: ${input.note}`);
+        const response = await llm({
+          task: "assistant",
+          messages: [{ role: "system", content: letterSystemPrompt(input.language, input.kind) }, { role: "user", content: `Facts:\n- ${lines.join("\n- ")}` }],
+        });
+        const raw = textOf(response).trim();
+        if (!raw) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: AI_UNAVAILABLE });
+        const teacher = (ctx.user.name ?? "").trim() || (input.language === "ar" ? "[الاسم]" : "[Your name]");
+        return { text: raw.replace(/\{\{\s*student\s*\}\}/gi, studentName || (input.language === "ar" ? "الطالب" : "your child")).replace(/\{\{\s*teacher\s*\}\}/gi, teacher) };
+      }),
   }),
 
   // A stateless chat with the teacher companion. Nothing here involves children's data and nothing is stored.

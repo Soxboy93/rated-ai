@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { useEffect, useState } from "react";
-import { Route, Router as WouterRouter, Switch, useLocation } from "wouter";
+import { Link, Route, Router as WouterRouter, Switch, useLocation } from "wouter";
+import KidShell from "./kid/Shell";
 import { memoryLocation } from "wouter/memory-location";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -28,10 +29,33 @@ import ParentArea from "./parent/ParentArea";
 import { LangProvider, t, useLang } from "./i18n";
 
 /** Kid routes need to know who is playing; until a profile is chosen, show the picker. */
+/** What a teacher can switch off for a class. In focus mode only lessons, the activities set for the class and the mood check-in stay open. */
+function isBlocked(path: string, c: { chat: boolean; search: boolean; focus: boolean } | undefined) {
+  if (!c) return false;
+  if (path.startsWith("/chat")) return !c.chat || c.focus;
+  if (path.startsWith("/search")) return !c.search || c.focus;
+  if (c.focus) return ["/story", "/doodle", "/pet", "/homework"].some(p => path.startsWith(p));
+  return false;
+}
+
+function TurnedOff() {
+  return (
+    <KidShell title={t("Not right now")}>
+      <div className="k-card k-note-warn" role="status" style={{ maxWidth: 560, margin: "0 auto", display: "grid", gap: 12, textAlign: "center" }}>
+        <span style={{ fontSize: "2.4rem" }} aria-hidden="true">🔒</span>
+        <p style={{ fontSize: "1.2rem" }}>{t("Your teacher has turned this off for now.")}</p>
+        <Link href="/" className="k-btn">🏠 {t("Home")}</Link>
+      </div>
+    </KidShell>
+  );
+}
+
 function KidRoutes() {
-  const { child, profilesLoading } = useChild();
+  const { child, profilesLoading, progress } = useChild();
+  const [path] = useLocation();
   if (profilesLoading) return <div className="kid grid min-h-screen place-items-center"><p className="k-muted">{t("Loading…")}</p></div>;
   if (!child) return <PlayerPicker />;
+  if (isBlocked(path, progress?.controls)) return <TurnedOff />;
   return (
     <Switch>
       <Route path="/" component={Home} />

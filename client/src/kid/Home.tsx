@@ -34,6 +34,8 @@ export default function Home() {
   const games: Tile[] = (Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map(id => ({
     href: `/games/${id}`, name: GAME_META[id].name, sub: GAME_META[id].blurb, icon: GAME_META[id].icon, color: GAME_META[id].color,
   }));
+  const ctl = progress?.controls;
+  const focus = !!ctl?.focus;
   const more: Tile[] = [
     { href: "/search", name: t("Safe Search"), sub: t("Find things out"), icon: "🔎", color: "var(--c-search)" },
     { href: "/chat", name: t("Chat with {name}", { name: guide.short }), sub: t("Ask me anything"), icon: "💬", color: "var(--c-chat)" },
@@ -57,6 +59,13 @@ export default function Home() {
       : lessons[0]
         ? { href: `/lesson/${lessons[0].shareId}`, icon: "🎮", title: lessons[0].title, hint: t("Practise it again with the game. It is not marked!"), cta: t("Practise") }
         : { href: "/games/math", icon: "🎮", title: t("Play a game"), hint: t("Any game counts"), cta: t("Play now") };
+
+  const visibleMore = more.filter(tl => {
+    if (tl.href === "/search") return !focus && ctl?.search !== false;
+    if (tl.href === "/chat") return !focus && ctl?.chat !== false;
+    if (focus) return !["/story", "/doodle", "/pet", "/homework"].includes(tl.href);
+    return true;
+  });
 
   const renderTile = (tl: Tile, i: number) => (
     <Link key={tl.href} href={tl.href} className="k-tile k-in" style={{ ["--c" as string]: tl.color, animationDelay: `${Math.min(i, 10) * 40}ms` }} onClick={() => playSound("tap")}>
@@ -100,11 +109,13 @@ export default function Home() {
             </div>
             <Link href={next.href} className="k-btn" onClick={() => playSound("tap")}>{next.cta}</Link>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link href="/search" className="k-btn small light" onClick={() => playSound("tap")}>🔎 {t("Find something out")}</Link>
-            <Link href="/homework" className="k-btn small light" onClick={() => playSound("tap")}>📚 {t("Help with homework")}</Link>
-            <Link href="/chat" className="k-btn small light" onClick={() => playSound("tap")}>💬 {t("Talk to {name}", { name: guide.short })}</Link>
-          </div>
+          {focus ? <p className="k-muted">🎯 {t("Focus time: your teacher has set up what to do right now.")}</p> : (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {ctl?.search !== false && <Link href="/search" className="k-btn small light" onClick={() => playSound("tap")}>🔎 {t("Find something out")}</Link>}
+              <Link href="/homework" className="k-btn small light" onClick={() => playSound("tap")}>📚 {t("Help with homework")}</Link>
+              {ctl?.chat !== false && <Link href="/chat" className="k-btn small light" onClick={() => playSound("tap")}>💬 {t("Talk to {name}", { name: guide.short })}</Link>}
+            </div>
+          )}
         </section>
 
         {lessons.length > 0 && (
@@ -167,14 +178,14 @@ export default function Home() {
           </div>
         </section>
 
-        <section aria-labelledby="games" style={{ display: "grid", gap: 12 }}>
+        {!focus && <section aria-labelledby="games" style={{ display: "grid", gap: 12 }}>
           <h2 id="games" style={sectionTitle}>{t("Brain games")}</h2>
           <div style={grid}>{games.map(renderTile)}</div>
-        </section>
+        </section>}
 
         <section aria-labelledby="more" style={{ display: "grid", gap: 12 }}>
           <h2 id="more" style={sectionTitle}>{t("Make, ask and explore")}</h2>
-          <div style={grid}>{more.map((tl, i) => renderTile(tl, i + games.length))}</div>
+          <div style={grid}>{visibleMore.map((tl, i) => renderTile(tl, i + games.length))}</div>
         </section>
 
         <p className="k-card" style={{ display: "flex", gap: 12, alignItems: "center", background: "var(--k-brand-soft)", borderColor: "transparent" }}>

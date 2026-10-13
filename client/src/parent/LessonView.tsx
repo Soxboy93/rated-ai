@@ -114,7 +114,7 @@ function Editor({ draft, set }: { draft: LessonContent; set: (c: LessonContent) 
             <Button type="button" variant="outline" size="sm" onClick={() => patch({ [kind]: drop(draft[kind], i) })}>{t("Remove")}</Button>
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" disabled={draft[kind].length >= 10} onClick={() => patch({ [kind]: [...draft[kind], { q: "", options: ["", "", "", ""], answer: 0, explanation: "" }] })}>＋ {t("Add a question")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={draft[kind].length >= 10} onClick={() => patch({ [kind]: [...draft[kind], { q: "", options: ["", "", "", ""], answer: 0, explanation: "" }] })}>＋ {kind === "quiz" ? t("Add a question") : t("Add a practice question")}</Button>
       </section>
       ))}
 
@@ -197,6 +197,45 @@ function PrintSheet({ lesson, mode }: { lesson: Lesson; mode: "plan" | "workshee
 
 /* ------------------------------------------------------------------------------------------ sharing */
 
+/** What to re-teach: the questions the class missed, who needs support or a challenge, and an AI-written plan (it sees counts, never names). */
+function Insights({ shareId }: { shareId: string }) {
+  const run = trpc.lessons.insights.useMutation();
+  const d = run.data;
+  return (
+    <div className="space-y-3 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={() => run.mutate({ shareId })} disabled={run.isPending}>{run.isPending ? t("Reading the results…") : `💡 ${t("What should I re-teach?")}`}</Button>
+        <span className="text-xs text-gray-600">{t("The companion sees the questions and how many students picked each answer, never a student's name.")}</span>
+      </div>
+      {run.error && <p className="text-red-600" role="alert">{t(run.error.message)}</p>}
+      {d && (
+        <div className="space-y-3">
+          {!d.enough && <p className="text-amber-900">{t("At least {n} students need to take the quiz before the companion can suggest a plan.", { n: 3 })}</p>}
+          {d.insights && (
+            <div className="space-y-2">
+              <p className="font-medium">{d.insights.summary}</p>
+              {d.insights.misconceptions.length > 0 && <ul className="list-disc ps-5">{d.insights.misconceptions.map((m, i) => <li key={i}>{m}</li>)}</ul>}
+              {d.insights.reteach.length > 0 && (
+                <ol className="space-y-1 ps-5 list-decimal">
+                  {d.insights.reteach.map((r, i) => <li key={i}><b>{r.title}</b> ({t("{n} minutes", { n: r.minutes })}): {r.instructions}</li>)}
+                </ol>
+              )}
+              {d.insights.quickCheck && <p>❓ <b>{t("Quick check next lesson:")}</b> {d.insights.quickCheck}</p>}
+              {d.insights.extension && <p>🚀 <b>{t("For students who got everything:")}</b> {d.insights.extension}</p>}
+              <p className="text-xs text-gray-500">{t("A draft from the companion. Use your own judgement.")}</p>
+            </div>
+          )}
+          <div className="grid gap-2 sm:grid-cols-3">
+            {([[t("May need support"), d.needsSupport], [t("Ready for a challenge"), d.readyForMore], [t("Not taken yet"), d.notYetTaken]] as const).map(([label, names]) => (
+              <div key={label} className="rounded border bg-white p-2"><p className="font-medium">{label}</p><p className="text-gray-700">{names.length ? names.map((n, i) => <span key={i}>{i ? "، " : ""}<bdi>{n}</bdi></span>) : "–"}</p></div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Results({ shareId }: { shareId: string }) {
   const { data, isLoading } = trpc.lessons.results.useQuery({ shareId });
   if (isLoading || !data) return <p className="text-sm text-gray-600">{t("Loading…")}</p>;
@@ -216,6 +255,7 @@ function Results({ shareId }: { shareId: string }) {
           ))}
         </div>
       )}
+      {data.doneCount > 0 && <Insights shareId={shareId} />}
       <ul className="grid gap-1 sm:grid-cols-2">
         {data.students.map(s => <li key={s.profileId} className="flex justify-between rounded border bg-white px-2 py-1"><bdi>{s.childName}</bdi><span>{s.correct === null ? t("Not done") : `${s.correct} / ${s.total}`}</span></li>)}
       </ul>

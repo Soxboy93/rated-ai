@@ -99,6 +99,61 @@ export async function getAllUserMessages(userId: string) {
   return db.select().from(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
 }
 
+/** Flagged messages across everything this account owns, newest first, with the student they belong to. */
+export async function listFlaggedMessages(userId: string, limit = 300) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: chatMessages.id, sessionId: chatMessages.sessionId, role: chatMessages.role, content: chatMessages.content,
+      flagged: chatMessages.flagged, createdAt: chatMessages.createdAt, reviewedAt: chatMessages.reviewedAt,
+      profileId: chatSessions.profileId, childName: chatSessions.childName, language: chatSessions.language,
+    })
+    .from(chatMessages)
+    .innerJoin(chatSessions, eq(chatSessions.id, chatMessages.sessionId))
+    .where(and(eq(chatSessions.userId, userId), ne(chatMessages.flagged, "safe")))
+    .orderBy(desc(chatMessages.createdAt))
+    .limit(limit);
+}
+
+/** Plays per calendar day for these students since a date (the server's local day), for the school's weekly chart. */
+export async function getPlayDayCounts(profileIds: string[], since: Date) {
+  const db = await getDb();
+  if (!db || profileIds.length === 0) return [];
+  const rows = await db
+    .select({ day: sql<string>`DATE_FORMAT(${schema.gamePlays.createdAt}, '%Y-%m-%d')`, plays: sql<string>`COUNT(*)` })
+    .from(schema.gamePlays)
+    .where(and(inArray(schema.gamePlays.profileId, profileIds), gte(schema.gamePlays.createdAt, since)))
+    .groupBy(sql`DATE_FORMAT(${schema.gamePlays.createdAt}, '%Y-%m-%d')`);
+  return rows.map(r => ({ day: r.day, plays: Number(r.plays) }));
+}
+
+/** Quiz results for every lesson shared by this account, with the class each belongs to. */
+export async function listAllLessonResultRows(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ classId: schema.lessonShares.classId, correct: schema.lessonResults.correct, total: schema.lessonResults.total })
+    .from(schema.lessonResults)
+    .innerJoin(schema.lessonShares, eq(schema.lessonShares.id, schema.lessonResults.shareId))
+    .where(and(eq(schema.lessonResults.userId, userId), isNull(schema.lessonShares.archivedAt)));
+}
+
+/** Marks a flagged message reviewed (or not). Only messages in this account's own chats can be changed. */
+export async function setMessageReviewed(userId: string, messageId: string, reviewed: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db
+    .select({ id: chatMessages.id })
+    .from(chatMessages)
+    .innerJoin(chatSessions, eq(chatSessions.id, chatMessages.sessionId))
+    .where(and(eq(chatMessages.id, messageId), eq(chatSessions.userId, userId)))
+    .limit(1);
+  if (!row) return false;
+  await db.update(chatMessages).set({ reviewedAt: reviewed ? new Date() : null }).where(eq(chatMessages.id, messageId));
+  return true;
+}
+
 // Parental Settings
 export async function createParentalSettings(settings: InsertParentalSettings) {
   const db = await getDb();
