@@ -5,10 +5,11 @@ import type { AppRouter } from "../../../server/routers";
 import { badgeById } from "@shared/gamification";
 import Confetti from "./Confetti";
 import { playSound } from "./sound";
+import { t } from "@/i18n";
 
 export type Progress = inferRouterOutputs<AppRouter>["progress"]["get"];
 export type AgeGroup = "kids" | "tweens" | "teens";
-export type Child = { id: string; childName: string; ageGroup: AgeGroup; selectedCharacter: string | null };
+export type Child = { id: string; childName: string; ageGroup: AgeGroup; selectedCharacter: string | null; classId?: string | null };
 export type Celebration = { badges?: Array<{ id: string; name: string; icon: string }>; levelUp?: number | null; title?: string };
 
 type Ctx = {
@@ -92,7 +93,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Celebration"
+          aria-label={t("Celebration")}
           className="fixed inset-0 z-[90] grid place-items-center p-4"
           style={{ background: "rgba(20,12,60,.55)" }}
           onClick={() => setCelebration(null)}
@@ -101,18 +102,18 @@ export function ChildProvider({ children }: { children: ReactNode }) {
             {celebration.levelUp ? (
               <>
                 <div className="display" style={{ fontSize: "3.5rem" }} aria-hidden="true">🎉</div>
-                <h2 style={{ fontSize: "2rem" }}>Level {celebration.levelUp}!</h2>
-                <p className="k-muted" style={{ marginTop: 6 }}>You're getting stronger every day.</p>
+                <h2 style={{ fontSize: "2rem" }}>{t("Level {level}!", { level: celebration.levelUp })}</h2>
+                <p className="k-muted" style={{ marginTop: 6 }}>{t("You're getting stronger every day.")}</p>
               </>
             ) : null}
             {celebration.badges?.map(b => (
               <div key={b.id} style={{ marginTop: 14 }}>
                 <div className="k-bob" style={{ fontSize: "4rem" }} aria-hidden="true">{badgeById(b.id)?.icon ?? b.icon}</div>
-                <h2 style={{ fontSize: "1.7rem" }}>New badge: {b.name}!</h2>
-                <p className="k-muted">{badgeById(b.id)?.description}</p>
+                <h2 style={{ fontSize: "1.7rem" }}>{t("New badge: {name}!", { name: t(badgeById(b.id)?.name ?? b.name) })}</h2>
+                <p className="k-muted">{t(badgeById(b.id)?.description ?? "")}</p>
               </div>
             ))}
-            <button className="k-btn" style={{ marginTop: 18 }} onClick={() => setCelebration(null)} autoFocus>Awesome!</button>
+            <button className="k-btn" style={{ marginTop: 18 }} onClick={() => setCelebration(null)} autoFocus>{t("Awesome!")}</button>
           </div>
         </div>
       )}

@@ -5,13 +5,15 @@
  * generation, and anything persistent. Nothing leaves the page.
  */
 import superjson from "superjson";
-import { CONSENT_VERSION } from "@shared/consent";
+import { consentVersionFor } from "@shared/consent";
+import { buildClassOverview, type StudentAggregate } from "@shared/classroom";
+import { ageGroupForGrade, type AccountType, type Lang } from "@shared/jordan";
 import { AI_CHARACTERS } from "@shared/characters";
 import {
   BADGES, badgeById, earnedBadgeIds, effectiveStreak, levelFromXp, levelProgress, levelTitle, nextStreak,
   resolvePlayDay, xpForPlay, type GameId, type ProgressStats,
 } from "@shared/gamification";
-import { screenText } from "../../../server/safety";
+import { screenText, safeFallbackReply } from "../../../server/safety";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
 
 class DemoError extends Error {
@@ -22,15 +24,19 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 const dayMs = 86_400_000;
 const isoLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-type Profile = { id: string; userId: string; childName: string; ageGroup: "kids" | "tweens" | "teens"; selectedCharacter: string | null; createdAt: Date };
+type Profile = { id: string; userId: string; childName: string; ageGroup: "kids" | "tweens" | "teens"; selectedCharacter: string | null; classId: string | null; createdAt: Date };
+type Cls = { id: string; name: string; grade: number };
+type Assignment = { id: string; classId: string; game: GameId; level: number; note: string | null; dueDate: string | null; createdAt: Date; archived: boolean };
 type Play = { id: string; profileId: string; game: GameId; level: number; correct: number; total: number; xpEarned: number; createdAt: Date };
 type Msg = { id: string; sessionId: string; role: "user" | "assistant"; content: string; flagged: "safe" | "review" | "blocked"; createdAt: Date };
-type Session = { id: string; userId: string; profileId: string; childName: string; characterId: string | null; ageGroup: string; createdAt: Date };
+type Session = { id: string; userId: string; profileId: string; childName: string; characterId: string | null; ageGroup: string; language: Lang; createdAt: Date };
 
 function fresh() {
   return {
-    user: null as null | { id: string; email: string; name: string | null; role: "user"; loginMethod: string; createdAt: Date; lastSignedIn: Date },
+    user: null as null | { id: string; email: string; name: string | null; role: "user"; loginMethod: string; accountType: AccountType; language: Lang | null; createdAt: Date; lastSignedIn: Date },
     consent: null as null | { version: string; grantedAt: Date },
+    classes: [] as Cls[],
+    assignments: [] as Assignment[],
     pin: null as string | null,
     unlocked: false,
     profiles: [] as Profile[],
@@ -51,7 +57,11 @@ let S = fresh();
 
 const log = (action: string, detail?: string) => S.audit.unshift({ id: uid(), action, detail: detail ?? null, createdAt: new Date() });
 const requireUser = () => { if (!S.user) throw new DemoError("UNAUTHORIZED", UNAUTHED_ERR_MSG); return S.user; };
-const requireConsent = () => { requireUser(); if (!S.consent || S.consent.version !== CONSENT_VERSION) throw new DemoError("FORBIDDEN", "Parental consent required (10004)"); };
+const accountType = (): AccountType => S.user?.accountType ?? "family";
+const requiredVersion = () => consentVersionFor(accountType());
+const requireConsent = () => { requireUser(); if (!S.consent || S.consent.version !== requiredVersion()) throw new DemoError("FORBIDDEN", "Parental consent required (10004)"); };
+const requireSchool = () => { if (accountType() !== "school") throw new DemoError("FORBIDDEN", "This is only available to school accounts."); };
+const klass = (id: string) => { const c = S.classes.find(x => x.id === id); if (!c) throw new DemoError("NOT_FOUND", "Class not found"); return c; };
 const requireParent = () => { requireUser(); if (!S.unlocked) throw new DemoError("FORBIDDEN", "Parent mode is locked (10003)"); };
 const profile = (id: string) => {
   const p = S.profiles.find(x => x.id === id);
@@ -92,6 +102,13 @@ function recordPlay(profileId: string, game: GameId, level: number, correct: num
 }
 const named = (ids: string[]) => ids.map(id => ({ id, name: badgeById(id)?.name ?? id, icon: badgeById(id)?.icon ?? "🏅" }));
 
+const doneBy = (a: Assignment, profileId: string) => S.plays.some(p => p.profileId === profileId && p.game === a.game && p.level >= a.level && p.createdAt >= a.createdAt);
+function assignmentsFor(profileId: string) {
+  const classId = S.profiles.find(p => p.id === profileId)?.classId;
+  if (!classId) return [];
+  return S.assignments.filter(a => a.classId === classId && !a.archived).map(a => ({ id: a.id, game: a.game, level: a.level, note: a.note, dueDate: a.dueDate, done: doneBy(a, profileId) }));
+}
+
 function snapshot(profileId: string, clientDay?: string) {
   const today = resolvePlayDay(clientDay, new Date());
   const row = S.progress.get(profileId);
@@ -107,6 +124,7 @@ function snapshot(profileId: string, clientDay?: string) {
     playedToday: row?.lastPlayDate === today, badges: S.badges.get(profileId) ?? [], breakdown, totalPlays: plays.length,
     recent: plays.slice(-8).reverse().map(p => ({ game: p.game, correct: p.correct, total: p.total, xpEarned: p.xpEarned, createdAt: p.createdAt })),
     lastMood: moods[0]?.mood ?? null, lastMoodAt: moods[0]?.createdAt ?? null,
+    assignments: assignmentsFor(profileId),
   };
 }
 
@@ -126,7 +144,23 @@ const TOPICS: Array<[RegExp, { kids: string; older: string }]> = [
 ];
 const OPENER: Record<string, string> = { sage: "Hoo-hoo! ", phoenix: "✨ ", nova: "Beep boop! ", echo: "" };
 
-function demoReply(text: string, characterId: string | null, age: string) {
+const AR_TOPICS: Array<[RegExp, string]> = [
+  [/سماء|زرق/, "تبدو السماء زرقاء لأن ضوء الشمس مكوّن من ألوان كثيرة، والضوء الأزرق هو الأكثر تشتتاً في الهواء!"],
+  [/شمس/, "الشمس كرة ضخمة من الغاز الساخن المتوهّج. وتتسع لأكثر من مليون كرة أرضية!"],
+  [/نوم/, "النوم يمنح جسمك ودماغك راحة. وأثناء النوم يرتّب دماغك ما تعلّمته اليوم."],
+  [/بركان|براكين/, "البركان جبل فيه فتحة في الأعلى. تخرج منها الحمم، وهي صخور منصهرة من أعماق الأرض!"],
+  [/طائر|طير|طيران/, "أجنحة الطائرة منحنية فيتحرك الهواء فوقها أسرع، وهذا يرفع الطائرة إلى السماء."],
+  [/صديق|أصدقاء/, "يمكنك أن تلقي التحية على طفل جديد وتسأله عمّا يحب أن يلعب. اللطف والإصغاء ينفعان دائماً!"],
+  [/يوم صعب|شجاع|خائف/, "شكراً لأنك أخبرتني. تمرّ على الجميع أيام صعبة. خذ ثلاثة أنفاس بطيئة معي، وتذكّر أنك تستطيع دائماً أن تتحدث إلى شخص بالغ تثق به."],
+];
+const OPENER_AR: Record<string, string> = { sage: "هو-هو! ", phoenix: "✨ ", nova: "بيب بوب! ", echo: "" };
+function demoReplyAr(text: string, characterId: string | null) {
+  const hit = AR_TOPICS.find(([re]) => re.test(text));
+  return (OPENER_AR[characterId ?? ""] ?? "") + (hit ? hit[1] : "هذا سؤال رائع! (ردّ تجريبي: في التطبيق الحقيقي يجيب مرشدك عن هذا بنموذج الذكاء الاصطناعي.)");
+}
+
+function demoReply(text: string, characterId: string | null, age: string, lang: Lang = "en") {
+  if (lang === "ar") return demoReplyAr(text, characterId);
   const hit = TOPICS.find(([re]) => re.test(text));
   const body = hit ? (age === "kids" ? hit[1].kids : hit[1].older) : "That's a great thing to wonder about! (Preview reply: in the live app your guide answers this with the AI model, in the style you've chosen.)";
   return (OPENER[characterId ?? ""] ?? "") + body;
@@ -138,21 +172,28 @@ const H: Record<string, Handler> = {
   "system.health": () => ({ ok: true }),
 
   "auth.me": () => S.user,
-  "auth.register": ({ email, name }) => {
-    S.user = { id: "demo-parent", email, name: name ?? null, role: "user", loginMethod: "email", createdAt: new Date(), lastSignedIn: new Date() };
+  "auth.register": ({ email, name, accountType: type, language }) => {
+    S.user = { id: "demo-parent", email, name: name ?? null, role: "user", loginMethod: "email", accountType: type ?? "family", language: language ?? null, createdAt: new Date(), lastSignedIn: new Date() };
+    S.profiles = []; S.progress.clear(); S.plays = []; S.badges.clear(); S.moods = []; S.classes = []; S.assignments = [];
+    if (S.user.accountType === "school") seedSchool(language ?? "en"); else seed();
     return S.user;
   },
   "auth.login": ({ email }) => {
-    S.user = { id: "demo-parent", email, name: null, role: "user", loginMethod: "email", createdAt: new Date(), lastSignedIn: new Date() };
+    S.user = { id: "demo-parent", email, name: null, role: "user", loginMethod: "email", accountType: S.user?.accountType ?? "family", language: S.user?.language ?? null, createdAt: new Date(), lastSignedIn: new Date() };
     return S.user;
   },
+  "auth.setLanguage": ({ language }) => { requireUser(); S.user!.language = language; return { success: true }; },
   "auth.logout": () => { S.user = null; S.unlocked = false; return { success: true }; },
 
   "consent.status": () => {
     requireUser();
-    return { version: CONSENT_VERSION, granted: !!S.consent && S.consent.version === CONSENT_VERSION, grantedVersion: S.consent?.version ?? null, grantedAt: S.consent?.grantedAt ?? null, contactEmail: null };
+    return { version: requiredVersion(), accountType: accountType(), granted: !!S.consent && S.consent.version === requiredVersion(), grantedVersion: S.consent?.version ?? null, grantedAt: S.consent?.grantedAt ?? null, contactEmail: null };
   },
-  "consent.grant": () => { requireUser(); S.consent = { version: CONSENT_VERSION, grantedAt: new Date() }; log("consent_granted", CONSENT_VERSION); return { success: true }; },
+  "consent.grant": ({ version }) => {
+    requireUser();
+    if (version !== requiredVersion()) throw new DemoError("BAD_REQUEST", "The consent wording has changed. Please reload the page and read it again.");
+    S.consent = { version: requiredVersion(), grantedAt: new Date() }; log("consent_granted", requiredVersion()); return { success: true };
+  },
   "consent.withdraw": () => { requireParent(); S.consent = null; log("consent_withdrawn"); return { success: true }; },
 
   "parent.status": () => { requireUser(); return { hasPin: !!S.pin, unlocked: S.unlocked }; },
@@ -176,13 +217,88 @@ const H: Record<string, Handler> = {
     return { sessions, messages: S.messages, flaggedMessages: S.messages.filter(m => m.flagged !== "safe"), totalSessions: sessions.length, totalMessages: S.messages.length };
   },
 
-  "profiles.list": () => { requireUser(); return S.profiles.map(({ id, childName, ageGroup, selectedCharacter }) => ({ id, childName, ageGroup, selectedCharacter })); },
-  "profiles.create": ({ childName, ageGroup, selectedCharacter }) => {
+  "profiles.list": () => { requireUser(); return S.profiles.map(({ id, childName, ageGroup, selectedCharacter, classId }) => ({ id, childName, ageGroup, selectedCharacter, classId })); },
+  "profiles.create": ({ childName, ageGroup, selectedCharacter, classId }) => {
     requireParent(); requireConsent();
     if (screenText(childName).level !== "safe") throw new DemoError("BAD_REQUEST", "Please use just a first name or nickname.");
-    if (S.profiles.length >= 6) throw new DemoError("BAD_REQUEST", "You can add up to 6 children.");
-    const p: Profile = { id: uid(), userId: "demo-parent", childName, ageGroup, selectedCharacter: selectedCharacter ?? null, createdAt: new Date() };
+    if (S.profiles.length >= (accountType() === "school" ? 400 : 6)) throw new DemoError("BAD_REQUEST", accountType() === "school" ? "An account can have up to 400 students." : "You can add up to 6 children.");
+    let age = ageGroup;
+    if (classId) { requireSchool(); age ??= ageGroupForGrade(klass(classId).grade); }
+    if (!age) throw new DemoError("BAD_REQUEST", "Choose an age group.");
+    const p: Profile = { id: uid(), userId: "demo-parent", childName, ageGroup: age, selectedCharacter: selectedCharacter ?? null, classId: classId ?? null, createdAt: new Date() };
     S.profiles.push(p); log("profile_created", childName); return { id: p.id };
+  },
+  "profiles.importRoster": ({ classId, names }) => {
+    requireParent(); requireConsent(); requireSchool();
+    const cls = klass(classId);
+    const existing = new Set(S.profiles.filter(p => p.classId === classId).map(p => p.childName.toLowerCase()));
+    const created: string[] = [];
+    const skipped: Array<{ name: string; reason: "empty" | "too_long" | "contact_details" | "duplicate" | "class_full" }> = [];
+    for (const raw of names as string[]) {
+      const name = raw.replace(/\s+/g, " ").trim();
+      if (!name) { skipped.push({ name: raw, reason: "empty" }); continue; }
+      if (name.length > 50) { skipped.push({ name, reason: "too_long" }); continue; }
+      if (screenText(name).level !== "safe") { skipped.push({ name, reason: "contact_details" }); continue; }
+      if (existing.has(name.toLowerCase())) { skipped.push({ name, reason: "duplicate" }); continue; }
+      if (existing.size >= 60) { skipped.push({ name, reason: "class_full" }); continue; }
+      S.profiles.push({ id: uid(), userId: "demo-parent", childName: name, ageGroup: ageGroupForGrade(cls.grade), selectedCharacter: null, classId, createdAt: new Date() });
+      existing.add(name.toLowerCase()); created.push(name);
+    }
+    log("roster_imported", `${cls.name}: ${created.length} added, ${skipped.length} skipped`);
+    return { created: created.length, skipped };
+  },
+
+  "classes.list": () => { requireUser(); return S.classes.map(c => ({ id: c.id, name: c.name, grade: c.grade, studentCount: S.profiles.filter(p => p.classId === c.id).length })); },
+  "classes.create": ({ name, grade }) => {
+    requireParent(); requireConsent(); requireSchool();
+    if (screenText(name).level !== "safe") throw new DemoError("BAD_REQUEST", "Please use just a first name or nickname.");
+    if (S.classes.length >= 20) throw new DemoError("BAD_REQUEST", "You can have up to 20 classes.");
+    const c: Cls = { id: uid(), name, grade }; S.classes.push(c); log("class_created", name); return { id: c.id };
+  },
+  "classes.update": ({ classId, ...rest }) => { requireParent(); requireSchool(); Object.assign(klass(classId), Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))); return { success: true }; },
+  "classes.delete": ({ classId }) => {
+    requireParent(); requireSchool(); const c = klass(classId);
+    S.profiles.forEach(p => { if (p.classId === classId) p.classId = null; });
+    S.assignments = S.assignments.filter(a => a.classId !== classId); S.classes = S.classes.filter(x => x.id !== classId);
+    log("class_deleted", c.name); return { success: true };
+  },
+  "classes.overview": ({ classId, localDay }) => {
+    requireParent(); requireSchool(); const c = klass(classId);
+    const open = S.assignments.filter(a => a.classId === classId && !a.archived);
+    const aggregates: StudentAggregate[] = S.profiles.filter(p => p.classId === classId).map(p => {
+      const row = S.progress.get(p.id);
+      const plays: StudentAggregate["plays"] = {};
+      let last: Date | null = null;
+      for (const pl of S.plays.filter(x => x.profileId === p.id)) {
+        const g = plays[pl.game] ?? { plays: 0, correct: 0, total: 0 };
+        g.plays++; g.correct += pl.correct; g.total += pl.total; plays[pl.game] = g;
+        if (!last || pl.createdAt > last) last = pl.createdAt;
+      }
+      const sids = S.sessions.filter(s => s.profileId === p.id).map(s => s.id);
+      const moods = S.moods.filter(m => m.profileId === p.id).sort((a, b) => +b.createdAt - +a.createdAt);
+      return {
+        profileId: p.id, childName: p.childName, ageGroup: p.ageGroup, xp: row?.xp ?? 0, streakDays: row?.streakDays ?? 0, lastPlayDate: row?.lastPlayDate ?? null,
+        plays, lastPlayedAt: last, flaggedMessages: S.messages.filter(m => sids.includes(m.sessionId) && m.role === "user" && m.flagged !== "safe").length,
+        flaggedMoods: moods.filter(m => m.flagged !== "safe").length, lastMood: moods[0]?.mood ?? null, assignmentsDone: open.filter(a => doneBy(a, p.id)).length,
+      };
+    });
+    return { class: { id: c.id, name: c.name, grade: c.grade }, ...buildClassOverview(aggregates, open.length, resolvePlayDay(localDay, new Date())) };
+  },
+  "assignments.list": ({ classId }) => {
+    requireParent(); requireSchool(); klass(classId);
+    const ids = S.profiles.filter(p => p.classId === classId).map(p => p.id);
+    return S.assignments.filter(a => a.classId === classId && !a.archived).map(a => ({ id: a.id, game: a.game, level: a.level, note: a.note, dueDate: a.dueDate, createdAt: a.createdAt, doneCount: ids.filter(id => doneBy(a, id)).length, studentCount: ids.length }));
+  },
+  "assignments.create": ({ classId, game, level, note, dueDate }) => {
+    requireParent(); requireConsent(); requireSchool(); klass(classId);
+    if (note && screenText(note).level !== "safe") throw new DemoError("BAD_REQUEST", "Please remove contact details or unsuitable words from the note.");
+    if (S.assignments.filter(a => a.classId === classId && !a.archived).length >= 10) throw new DemoError("BAD_REQUEST", "A class can have up to 10 open activities. Archive one first.");
+    S.assignments.push({ id: uid(), classId, game, level, note: note ?? null, dueDate: dueDate ?? null, createdAt: new Date(), archived: false });
+    log("assignment_created", `${klass(classId).name}: ${game} L${level}`); return { id: S.assignments[S.assignments.length - 1].id };
+  },
+  "assignments.archive": ({ assignmentId }) => {
+    requireParent(); requireSchool(); const a = S.assignments.find(x => x.id === assignmentId);
+    if (!a) throw new DemoError("NOT_FOUND", "Activity not found"); a.archived = true; return { success: true };
   },
   "profiles.update": ({ profileId, ...rest }) => { requireParent(); requireConsent(); Object.assign(profile(profileId), Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))); return { success: true }; },
   "profiles.delete": ({ profileId }) => {
@@ -205,9 +321,9 @@ const H: Record<string, Handler> = {
     const out = recordPlay(profileId, game, level, correct, total, resolvePlayDay(localDay, new Date()));
     return { ...out, newBadges: named(out.newBadges) };
   },
-  "progress.checkin": ({ profileId, mood, note }) => {
+  "progress.checkin": ({ profileId, mood, note, language }) => {
     requireConsent(); profile(profileId);
-    const verdict = note ? screenText(note) : { level: "safe" as const };
+    const verdict = note ? screenText(note, language ?? "en") : { level: "safe" as const };
     S.moods.push({ profileId, mood, note: note ?? null, flagged: verdict.level, createdAt: new Date() });
     const fresh = award(profileId);
     return { flagged: verdict.level, reply: verdict.level === "safe" ? null : ("reply" in verdict ? verdict.reply ?? null : null), newBadges: named(fresh) };
@@ -224,9 +340,9 @@ const H: Record<string, Handler> = {
   "accessibility.getSettings": () => ({ ...S.a11y }),
   "accessibility.updateSettings": i => { S.a11y = { dyslexiaMode: +i.dyslexiaMode, adhdMode: +i.adhdMode, autismMode: +i.autismMode, fontSize: i.fontSize, highContrast: +i.highContrast, textToSpeech: +i.textToSpeech, reducedMotion: +i.reducedMotion }; return { success: true }; },
 
-  "chat.createSession": ({ profileId, characterId }) => {
+  "chat.createSession": ({ profileId, characterId, language }) => {
     requireConsent(); const p = profile(profileId);
-    const s: Session = { id: uid(), userId: "demo-parent", profileId, childName: p.childName, characterId: characterId ?? p.selectedCharacter, ageGroup: p.ageGroup, createdAt: new Date() };
+    const s: Session = { id: uid(), userId: "demo-parent", profileId, childName: p.childName, characterId: characterId ?? p.selectedCharacter, ageGroup: p.ageGroup, language: language ?? "en", createdAt: new Date() };
     S.sessions.push(s); return { sessionId: s.id };
   },
   "chat.getMessages": ({ sessionId }) => { requireUser(); return S.messages.filter(m => m.sessionId === sessionId).sort((a, b) => +a.createdAt - +b.createdAt); },
@@ -234,22 +350,24 @@ const H: Record<string, Handler> = {
   "chat.sendMessage": ({ sessionId, message }) => {
     requireConsent();
     const s = S.sessions.find(x => x.id === sessionId); if (!s) throw new DemoError("NOT_FOUND", "Chat session not found");
-    const v = screenText(message); const now = Date.now();
+    const v = screenText(message, s.language); const now = Date.now();
     S.messages.push({ id: uid(), sessionId, role: "user", content: message, flagged: v.level, createdAt: new Date(now) });
-    const reply = v.level !== "safe" ? (v.reply as string) : demoReply(message, s.characterId, s.ageGroup);
+    const reply = v.level !== "safe" ? (v.reply as string) : demoReply(message, s.characterId, s.ageGroup, s.language);
     S.messages.push({ id: uid(), sessionId, role: "assistant", content: reply, flagged: "safe", createdAt: new Date(now + 1) });
     return { message: reply, flagged: v.level };
   },
 
-  "creative.generateStory": ({ prompt }) => {
+  "creative.generateStory": ({ prompt, language }) => {
     requireConsent();
-    if (screenText(prompt).level !== "safe") throw new DemoError("BAD_REQUEST", "That's not something I can write about. Let's try a different idea!");
+    if (screenText(prompt, language ?? "en").level !== "safe") throw new DemoError("BAD_REQUEST", language === "ar" ? safeFallbackReply("ar") : "That's not something I can write about. Let's try a different idea!");
+    if (language === "ar") return { content: `كان يا ما كان، ${prompt}.\n\nفي صباح مشرق حدث شيء مفاجئ. ظهرت مشكلة صغيرة تحتاج إلى حل ذكي ولطيف. فأخذ بطلنا نفَساً عميقاً وابتسم وقرّر أن يحاول.\n\nوفي الطريق انضم إليه أصدقاء جدد، وعملوا معاً حتى وجدوا الحل. وتعلّم الجميع أن الفضول والشجاعة يجعلان العالم أجمل.\n\nوانتهت الحكاية.\n\n(قصة تجريبية: في التطبيق الحقيقي يكتب الذكاء الاصطناعي قصة جديدة في كل مرة.)` };
     return { content: `Once upon a time, there was ${prompt}.\n\nOne bright morning, something surprising happened. A small problem appeared, and it needed a clever, kind answer. With a deep breath and a big smile, our hero decided to try.\n\nAlong the way, new friends joined the adventure. Together they worked it out, and everyone learned that being curious and brave makes the world a little bit brighter.\n\nThe end.\n\n(Preview story: in the live app the AI writes a new story every time.)` };
   },
-  "creative.generateIllustration": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Pictures need the live app. The preview can't paint them."); },
+  "creative.generateIllustration": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Could not create the picture right now."); },
   "creative.generateAvatar": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Pictures need the live app."); },
-  "homework.analyzeHomework": () => {
+  "homework.analyzeHomework": ({ language }) => {
     requireConsent();
+    if (language === "ar") return { question: "ما ناتج 12 + 15؟", steps: ["فكّك كل عدد إلى عشرات وآحاد: 12 = 10 + 2 و 15 = 10 + 5.", "اجمع العشرات: 10 + 10 = 20.", "اجمع الآحاد: 2 + 5 = 7.", "اجمع الناتجين: 20 + 7 = 27."], answer: "27", explanation: "تفكيك الأعداد إلى عشرات وآحاد يسهّل الجمع. (تجريبي: في التطبيق الحقيقي يقرأ المساعد صورة واجبك الفعلية.)", subject: "الرياضيات", difficulty: "easy" };
     return { question: "What is 12 + 15?", steps: ["Split each number into tens and ones: 12 = 10 + 2 and 15 = 10 + 5.", "Add the tens: 10 + 10 = 20.", "Add the ones: 2 + 5 = 7.", "Put them together: 20 + 7 = 27."], answer: "27", explanation: "Splitting numbers into tens and ones makes adding easier. (Preview: the live app reads your actual photo.)", subject: "Maths", difficulty: "easy" };
   },
   "homework.getHomeworkHistory": () => [],
@@ -265,15 +383,18 @@ const H: Record<string, Handler> = {
   },
 
   "reports.getLatestReport": () => S.report,
-  "reports.generateReport": () => {
+  "reports.generateReport": ({ language } = {} as any) => {
     requireConsent();
+    if (language === "ar") { S.report = { id: uid(), childName: S.profiles[0]?.childName ?? "طالب", totalMessages: S.messages.length, totalSessions: S.sessions.length, strengths: "يطرح أسئلة فضولية عن العلوم والحيوانات. (نص تجريبي.)", weaknesses: "يمكنه استكشاف التاريخ والجغرافيا أكثر.", recommendations: "جرّبوا موضوعاً جديداً كل أسبوع واطرحوا سؤال متابعة." }; return S.report; }
     S.report = { id: uid(), childName: S.profiles[0]?.childName ?? "Student", totalMessages: S.messages.length, totalSessions: S.sessions.length, strengths: "Asks curious questions about science and animals. (Preview text.)", weaknesses: "Could explore more about history and geography.", recommendations: "Try a new topic each week and ask a follow-up question." };
     return S.report;
   },
   "summaries.getLatest": () => S.summary,
-  "summaries.generate": () => {
+  "summaries.generate": ({ language } = {} as any) => {
     requireConsent();
-    const end = new Date(); S.summary = { id: uid(), weekStart: new Date(+end - 7 * dayMs), weekEnd: end, totalMessages: S.messages.length, totalSessions: S.sessions.length, topicsCovered: "Space, animals and everyday science. (Preview text.)", strengths: "Curious and keeps asking follow-up questions.", areasToImprove: "Try longer, more detailed questions.", recommendations: "Explore a science book together this weekend." };
+    const end = new Date();
+    if (language === "ar") { S.summary = { id: uid(), weekStart: new Date(+end - 7 * dayMs), weekEnd: end, totalMessages: S.messages.length, totalSessions: S.sessions.length, topicsCovered: "الفضاء والحيوانات والعلوم اليومية. (نص تجريبي.)", strengths: "فضولي ويواصل طرح أسئلة المتابعة.", areasToImprove: "جرّب أسئلة أطول وأكثر تفصيلاً.", recommendations: "اقرؤوا كتاباً علمياً معاً في نهاية الأسبوع." }; return S.summary; }
+    S.summary = { id: uid(), weekStart: new Date(+end - 7 * dayMs), weekEnd: end, totalMessages: S.messages.length, totalSessions: S.sessions.length, topicsCovered: "Space, animals and everyday science. (Preview text.)", strengths: "Curious and keeps asking follow-up questions.", areasToImprove: "Try longer, more detailed questions.", recommendations: "Explore a science book together this weekend." };
     return S.summary;
   },
   "account.auditLog": () => { requireParent(); return S.audit; },
@@ -283,7 +404,7 @@ const H: Record<string, Handler> = {
 /* ----------------------------------------------------------------- seed */
 /** Example data so the parent area and trophy room are not empty on first open. */
 function seed() {
-  const p: Profile = { id: "p-alex", userId: "demo-parent", childName: "Alex", ageGroup: "kids", selectedCharacter: "nova", createdAt: new Date() };
+  const p: Profile = { id: "p-alex", userId: "demo-parent", childName: "Alex", ageGroup: "kids", selectedCharacter: "nova", classId: null, createdAt: new Date() };
   S.profiles.push(p);
   const d = (n: number) => new Date(Date.now() - n * dayMs);
   recordPlay(p.id, "math", 1, 8, 10, isoLocal(d(2)), d(2));
@@ -293,6 +414,30 @@ function seed() {
   award(p.id);
 }
 seed();
+
+/** Example class for the school preview: made-up first names, varied activity, so the teacher screens are not empty. */
+function seedSchool(lang: Lang) {
+  const cls: Cls = { id: "c-4a", name: lang === "ar" ? "الرابع أ" : "4A", grade: 4 };
+  S.classes.push(cls);
+  const names = lang === "ar" ? ["ليلى", "عمر", "سارة", "يوسف", "مريم", "أحمد", "نور", "خالد"] : ["Layla", "Omar", "Sara", "Yousef", "Maryam", "Ahmad", "Noor", "Khaled"];
+  const guides = ["sage", "phoenix", "nova", "echo"];
+  const d = (n: number) => new Date(Date.now() - n * dayMs);
+  names.forEach((childName, i) => {
+    S.profiles.push({ id: `p-s${i}`, userId: "demo-parent", childName, ageGroup: "tweens", selectedCharacter: guides[i % 4], classId: cls.id, createdAt: new Date() });
+  });
+  const play = (i: number, game: GameId, correct: number, total: number, daysAgo: number) => recordPlay(`p-s${i}`, game, 1, correct, total, isoLocal(d(daysAgo)), d(daysAgo));
+  play(0, "math", 9, 10, 0); play(0, "quiz", 7, 8, 1); play(0, "spelling", 8, 8, 2);
+  play(1, "math", 6, 10, 1); play(1, "patterns", 5, 8, 3);
+  play(2, "quiz", 8, 8, 0); play(2, "memory", 6, 6, 1); play(2, "math", 10, 10, 2);
+  play(3, "math", 3, 10, 2); play(3, "math", 4, 10, 3); play(3, "patterns", 2, 8, 3);
+  play(4, "spelling", 7, 8, 4); play(4, "quiz", 6, 8, 5);
+  play(5, "math", 5, 10, 12);
+  play(6, "memory", 6, 6, 0); play(6, "patterns", 7, 8, 1);
+  S.moods.push({ profileId: "p-s3", mood: "sad", note: null, flagged: "safe", createdAt: d(2) });
+  S.moods.push({ profileId: "p-s6", mood: "happy", note: null, flagged: "safe", createdAt: d(1) });
+  S.assignments.push({ id: "a-1", classId: cls.id, game: "math", level: 1, note: lang === "ar" ? "حاولوا أن تحصلوا على 8 من 10" : "Try to get 8 out of 10", dueDate: null, createdAt: d(3), archived: false });
+  names.forEach((_, i) => award(`p-s${i}`));
+}
 
 /* ---------------------------------------------------------------- fetch */
 export const resetDemo = () => { S = fresh(); seed(); };

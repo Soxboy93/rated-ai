@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { useEffect } from "react";
 import { Route, Router as WouterRouter, Switch, useLocation } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -22,11 +23,12 @@ import Pet from "./kid/Pet";
 import Homework from "./kid/Homework";
 import { MathGame, SpellingGame, QuizGame, PatternGame, MemoryGame } from "./kid/games";
 import ParentArea from "./parent/ParentArea";
+import { LangProvider, t, useLang } from "./i18n";
 
 /** Kid routes need to know who is playing; until a profile is chosen, show the picker. */
 function KidRoutes() {
   const { child, profilesLoading } = useChild();
-  if (profilesLoading) return <div className="kid grid min-h-screen place-items-center"><p className="k-muted">Loading…</p></div>;
+  if (profilesLoading) return <div className="kid grid min-h-screen place-items-center"><p className="k-muted">{t("Loading…")}</p></div>;
   if (!child) return <PlayerPicker />;
   return (
     <Switch>
@@ -48,18 +50,30 @@ function KidRoutes() {
   );
 }
 
+let languageAppliedFor: string | null = null;
+
 function Router() {
   const { user, loading } = useAuth();
   const [location] = useLocation();
   const consent = trpc.consent.status.useQuery(undefined, { enabled: !!user });
+  const { lang, setLang } = useLang();
+  // A signed-in account's saved language wins over the browser default, but only once per sign-in: changing the
+  // language remounts this component and must not be undone by a stale cached value.
+  useEffect(() => {
+    if (!user) { languageAppliedFor = null; return; }
+    if (languageAppliedFor === user.id) return;
+    languageAppliedFor = user.id;
+    if (user.language && user.language !== lang) setLang(user.language);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
   if (loading || (user && consent.isLoading)) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t("Loading…")}</div>;
   }
   // Every feature stores a child's data, so the whole app requires a parent account.
   if (!user) return <AuthPage />;
   // Nothing that handles a child's data is reachable until a parent has agreed. The parent area stays
   // reachable so a parent can still export or delete data after withdrawing consent.
-  if (!consent.data?.granted && location !== "/parent") return <ConsentPage contactEmail={consent.data?.contactEmail ?? null} />;
+  if (!consent.data?.granted && location !== "/parent") return <ConsentPage contactEmail={consent.data?.contactEmail ?? null} accountType={consent.data?.accountType ?? "family"} version={consent.data?.version ?? ""} />;
   return (
     <AccessibilityProvider>
       <ChildProvider>
@@ -75,6 +89,7 @@ const demoHook = DEMO ? memoryLocation({ path: "/" }).hook : undefined;
 
 function App() {
   return (
+    <LangProvider>
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
@@ -82,12 +97,13 @@ function App() {
           {demoHook ? <WouterRouter hook={demoHook}><Router /></WouterRouter> : <Router />}
           {DEMO && (
             <div role="note" style={{ position: "fixed", left: 10, bottom: "calc(10px + env(safe-area-inset-bottom, 0px))", zIndex: 30, pointerEvents: "none", background: "#fff4d6", color: "#6e4300", border: "2px solid #f0cf86", borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>
-              Preview · example data · nothing is saved
+              {t("Preview · example data · nothing is saved")}
             </div>
           )}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
+    </LangProvider>
   );
 }
 

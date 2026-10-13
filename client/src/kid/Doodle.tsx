@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import KidShell from "./Shell";
 import { playSound } from "./sound";
+import { t, T } from "@/i18n";
 
 const COLORS = ["#2b2250", "#e5484d", "#ff9f1c", "#ffd23f", "#46c37b", "#1fc2b0", "#4f8cff", "#8b5cf6", "#ff5d8f", "#8a5a2b", "#ffffff"];
 const BACKGROUNDS = ["#ffffff", "#fff3c4", "#d8ecff", "#ffd9e6", "#d9f7e8", "#2b2250"];
@@ -133,40 +134,40 @@ export default function Doodle() {
 
   const toolBtn = (id: Tool, label: string, icon: string) => (
     <button key={id} className="k-btn small light" aria-pressed={tool === id} onClick={() => { setTool(id); playSound("tap"); }} style={{ background: tool === id ? "var(--c-doodle)" : undefined, color: tool === id ? "#fff" : undefined }}>
-      {icon} {label}
+      {icon} {t(label)}
     </button>
   );
 
   return (
-    <KidShell title="Doodle Pad" color="var(--c-doodle)">
+    <KidShell title={t("Doodle Pad")} color="var(--c-doodle)">
       <div style={{ display: "grid", gap: 14, maxWidth: 940, margin: "0 auto" }}>
         <div className="k-card" style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {toolBtn("brush", "Brush", "🖌️")}
-            {toolBtn("rainbow", "Rainbow", "🌈")}
-            {toolBtn("stamp", "Stamps", "⭐")}
-            {toolBtn("eraser", "Eraser", "🧽")}
+            {toolBtn("brush", T("Brush"), "🖌️")}
+            {toolBtn("rainbow", T("Rainbow"), "🌈")}
+            {toolBtn("stamp", T("Stamps"), "⭐")}
+            {toolBtn("eraser", T("Eraser"), "🧽")}
             <span style={{ flex: 1 }} />
-            <button className="k-btn small light" onClick={undo} disabled={!canUndo}>↩️ Undo</button>
-            <button className="k-btn small light" onClick={clear}>🗑️ Clear</button>
-            <button className="k-btn small" style={{ ["--c" as string]: "var(--c-doodle)" }} onClick={save}>💾 Save picture</button>
+            <button className="k-btn small light" onClick={undo} disabled={!canUndo}>↩️ {t("Undo")}</button>
+            <button className="k-btn small light" onClick={clear}>🗑️ {t("Clear")}</button>
+            <button className="k-btn small" style={{ ["--c" as string]: "var(--c-doodle)" }} onClick={save}>💾 {t("Save picture")}</button>
           </div>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
             {tool === "stamp" ? (
-              <div role="radiogroup" aria-label="Stamp" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <div role="radiogroup" aria-label={t("Stamp")} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {STAMPS.map(s => <button key={s} role="radio" aria-checked={stamp === s} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: stamp === s ? "4px solid var(--k-brand-2)" : undefined }} onClick={() => setStamp(s)}>{s}</button>)}
               </div>
             ) : (
-              <div role="radiogroup" aria-label="Colour" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {COLORS.map(c => <button key={c} role="radio" aria-checked={color === c} aria-label={`Colour ${c}`} onClick={() => { setColor(c); if (tool === "eraser") setTool("brush"); }} style={{ width: 38, height: 38, borderRadius: "50%", background: c, border: "3px solid var(--k-ink)", outline: color === c && tool !== "rainbow" ? "4px solid var(--k-brand-2)" : undefined, cursor: "pointer" }} />)}
+              <div role="radiogroup" aria-label={t("Colour")} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {COLORS.map(c => <button key={c} role="radio" aria-checked={color === c} aria-label={t("Colour {c}", { c })} onClick={() => { setColor(c); if (tool === "eraser") setTool("brush"); }} style={{ width: 38, height: 38, borderRadius: "50%", background: c, border: "3px solid var(--k-ink)", outline: color === c && tool !== "rainbow" ? "4px solid var(--k-brand-2)" : undefined, cursor: "pointer" }} />)}
               </div>
             )}
-            <div role="radiogroup" aria-label="Size" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              {SIZES.map(s => <button key={s} role="radio" aria-checked={size === s} aria-label={`Size ${s}`} onClick={() => setSize(s)} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: size === s ? "4px solid var(--k-brand-2)" : undefined }}><span style={{ width: Math.min(s, 30), height: Math.min(s, 30), borderRadius: "50%", background: "var(--k-ink)", display: "block" }} /></button>)}
+            <div role="radiogroup" aria-label={t("Size")} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {SIZES.map(s => <button key={s} role="radio" aria-checked={size === s} aria-label={t("Size {s}", { s })} onClick={() => setSize(s)} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: size === s ? "4px solid var(--k-brand-2)" : undefined }}><span style={{ width: Math.min(s, 30), height: Math.min(s, 30), borderRadius: "50%", background: "var(--k-ink)", display: "block" }} /></button>)}
             </div>
-            <div role="radiogroup" aria-label="Paper colour" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span className="k-muted" style={{ fontWeight: 800 }}>Paper</span>
-              {BACKGROUNDS.map(c => <button key={c} role="radio" aria-checked={bg === c} aria-label={`Paper ${c}`} onClick={() => changeBackground(c)} style={{ width: 30, height: 30, borderRadius: 8, background: c, border: "3px solid var(--k-ink)", cursor: "pointer", outline: bg === c ? "4px solid var(--k-brand-2)" : undefined }} />)}
+            <div role="radiogroup" aria-label={t("Paper colour")} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span className="k-muted" style={{ fontWeight: 800 }}>{t("Paper")}</span>
+              {BACKGROUNDS.map(c => <button key={c} role="radio" aria-checked={bg === c} aria-label={t("Paper {c}", { c })} onClick={() => changeBackground(c)} style={{ width: 30, height: 30, borderRadius: 8, background: c, border: "3px solid var(--k-ink)", cursor: "pointer", outline: bg === c ? "4px solid var(--k-brand-2)" : undefined }} />)}
             </div>
           </div>
         </div>
@@ -175,14 +176,14 @@ export default function Doodle() {
           ref={canvasRef}
           width={W}
           height={H}
-          aria-label="Drawing area"
+          aria-label={t("Drawing area")}
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={up}
           style={{ width: "100%", height: "auto", aspectRatio: `${W} / ${H}`, border: "3px solid var(--k-ink)", borderRadius: 22, boxShadow: "0 5px 0 var(--k-ink)", touchAction: "none", cursor: tool === "stamp" ? "copy" : "crosshair", background: "#fff" }}
         />
-        <p className="k-muted" style={{ textAlign: "center", fontSize: ".95rem" }}>{saved ? (import.meta.env.VITE_DEMO ? "Saving a PNG to your device works in the live app. Your drawing never leaves your device." : "Saved to your device! Your drawing never leaves it unless you share it.") : "Your doodles stay on this device. Press Save to keep one."}</p>
+        <p className="k-muted" style={{ textAlign: "center", fontSize: ".95rem" }}>{saved ? (import.meta.env.VITE_DEMO ? t("Saving a PNG to your device works in the live app. Your drawing never leaves your device.") : t("Saved to your device! Your drawing never leaves it unless you share it.")) : t("Your doodles stay on this device. Press Save to keep one.")}</p>
       </div>
     </KidShell>
   );

@@ -70,3 +70,12 @@ describe("Arabic helpers", () => {
     expect(toWesternDigits("١٢ + ٣٥")).toBe("12 + 35");
   });
 });
+
+describe("parseRosterText", () => {
+  it("reads one name per line, the first spreadsheet column, and drops a header", async () => {
+    const { parseRosterText } = await import("@shared/classroom");
+    expect(parseRosterText("Name\nLayla\r\nOmar, Grade 3\n\n  Sara  ")).toEqual(["Layla", "Omar", "Sara"]);
+    expect(parseRosterText("﻿الاسم\nليلى\n\"عمر\";الصف الثالث\nسارة،٣")).toEqual(["ليلى", "عمر", "سارة"]);
+    expect(parseRosterText("")).toEqual([]);
+  });
+});

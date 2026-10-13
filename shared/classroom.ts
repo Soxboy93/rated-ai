@@ -102,3 +102,20 @@ export function buildClassOverview(aggregates: StudentAggregate[], assignmentCou
     },
   };
 }
+
+const ROSTER_HEADERS = /^(name|names|student|students|student name|first name|الاسم|الأسماء|اسم الطالب|الطالب|الطلاب)$/i;
+
+/**
+ * Turns pasted text or the contents of a .csv/.txt file into a list of student names. One name per line; when a
+ * line has several comma, semicolon or tab separated cells, only the first is used (a spreadsheet's name column).
+ * A header row such as "Name" or "الاسم" is dropped. The server still screens every name.
+ */
+export function parseRosterText(text: string): string[] {
+  const names = text
+    .replace(/^﻿/, "")
+    .split(/\r?\n/)
+    .map(line => line.split(/[,;\t،؛]/)[0].replace(/^["'\s]+|["'\s]+$/g, "").replace(/\s+/g, " "))
+    .filter(Boolean);
+  if (names.length && ROSTER_HEADERS.test(names[0])) names.shift();
+  return names;
+}

@@ -9,6 +9,7 @@ import { useChild } from "../ChildContext";
 import { GAME_META, guideById } from "../guides";
 import { playSound } from "../sound";
 import Confetti from "../Confetti";
+import { t } from "@/i18n";
 
 const meta = GAME_META.memory;
 
@@ -57,7 +58,7 @@ export default function Memory() {
       setResult({ xpEarned: out.xpEarned });
       await refreshProgress();
       celebrate({ badges: out.newBadges, levelUp: out.leveledUp ? levelFromXp(out.xp) : null });
-    } catch (e) { setSaveError(e instanceof Error ? e.message : "Could not save your score."); }
+    } catch (e) { setSaveError(e instanceof Error ? t(e.message) : t("Could not save your score.")); }
   }, [child, submit, level, localDay, refreshProgress, celebrate]);
 
   const flip = (card: MemoryCard) => {
@@ -92,15 +93,15 @@ export default function Memory() {
             <span style={{ fontSize: "4rem" }} aria-hidden="true">{meta.icon}</span>
             <div>
               <h2 style={{ fontSize: "2rem" }}>{meta.name}</h2>
-              <p className="k-muted">Flip two cards. If they match, they stay open. Find every pair in as few moves as you can!</p>
+              <p className="k-muted">{t("Flip two cards. If they match, they stay open. Find every pair in as few moves as you can!")}</p>
             </div>
           </div>
-          <h3 style={{ fontSize: "1.4rem" }}>Choose your level</h3>
+          <h3 style={{ fontSize: "1.4rem" }}>{t("Choose your level")}</h3>
           <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             {([1, 2, 3] as Level[]).map(lv => (
               <button key={lv} className="k-btn" style={{ ["--c" as string]: meta.color, flexDirection: "column", minHeight: 96 }} onClick={() => { playSound("tap"); start(lv); }}>
                 <span aria-hidden="true">{"⭐".repeat(lv)}</span>
-                <span>{["Easy", "Medium", "Tricky"][lv - 1]}</span>
+                <span>{[t("Easy"), t("Medium"), t("Tricky")][lv - 1]}</span>
               </button>
             ))}
           </div>
@@ -117,18 +118,18 @@ export default function Memory() {
         <Confetti fire={confetti} />
         <div className="k-card k-in" style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", display: "grid", gap: 14 }}>
           <img src={guide.art} alt="" width={120} height={120} className="k-bob" style={{ margin: "0 auto" }} />
-          <h2 style={{ fontSize: "2.2rem" }}>You found them all!</h2>
-          <div style={{ fontSize: "3rem" }} role="img" aria-label={`${stars} out of 3 stars`}>
+          <h2 style={{ fontSize: "2.2rem" }}>{t("You found them all!")}</h2>
+          <div style={{ fontSize: "3rem" }} role="img" aria-label={t("{n} out of 3 stars", { n: stars })}>
             {[1, 2, 3].map(s => <span key={s} style={{ opacity: s <= stars ? 1 : 0.2 }}>⭐</span>)}
           </div>
-          <p className="display" style={{ fontSize: "1.5rem" }}>{pairs} pairs in {moves} moves</p>
-          {result ? <p className="k-chip k-in" style={{ margin: "0 auto", background: "var(--c-trophy)", color: "#2b2250", fontSize: "1.3rem" }}>+{result.xpEarned} XP</p>
+          <p className="display" style={{ fontSize: "1.5rem" }}>{t("{pairs} pairs in {moves} moves", { pairs, moves })}</p>
+          {result ? <p className="k-chip k-in" style={{ margin: "0 auto", background: "var(--c-trophy)", color: "#2b2250", fontSize: "1.3rem" }}>{t("+{n} XP", { n: result.xpEarned })}</p>
             : saveError ? <p role="alert" style={{ color: "var(--k-bad)", fontWeight: 800 }}>{saveError}</p>
-            : <p className="k-muted">Saving your points…</p>}
+            : <p className="k-muted">{t("Saving your points…")}</p>}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button className="k-btn" style={{ ["--c" as string]: meta.color }} onClick={() => start(level)}>🔁 Play again</button>
-            <button className="k-btn light" onClick={() => setPhase("intro")}>⭐ Change level</button>
-            <Link href="/" className="k-btn light">🏠 Home</Link>
+            <button className="k-btn" style={{ ["--c" as string]: meta.color }} onClick={() => start(level)}>🔁 {t("Play again")}</button>
+            <button className="k-btn light" onClick={() => setPhase("intro")}>⭐ {t("Change level")}</button>
+            <Link href="/" className="k-btn light">🏠 {t("Home")}</Link>
           </div>
         </div>
       </KidShell>
@@ -139,10 +140,10 @@ export default function Memory() {
     <KidShell title={meta.name} color={meta.color}>
       <div style={{ display: "grid", gap: 16, maxWidth: 620, margin: "0 auto" }}>
         <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
-          <span className="k-chip">Moves: {moves}</span>
-          <span className="k-chip">Pairs: {matched.size} / {pairs}</span>
+          <span className="k-chip">{t("Moves: {n}", { n: moves })}</span>
+          <span className="k-chip">{t("Pairs: {a} / {b}", { a: matched.size, b: pairs })}</span>
         </div>
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: `repeat(${cols}, 1fr)` }} role="group" aria-label="Memory cards">
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: `repeat(${cols}, 1fr)` }} role="group" aria-label={t("Memory cards")}>
           {deck.map(card => {
             const isOpen = open.includes(card.id) || matched.has(card.pairId);
             return (
@@ -151,7 +152,7 @@ export default function Memory() {
                 className={`k-flip${isOpen ? " open" : ""}${matched.has(card.pairId) ? " matched" : ""}`}
                 style={{ background: "none", border: 0, padding: 0 }}
                 onClick={() => flip(card)}
-                aria-label={isOpen ? `Card showing ${card.emoji}` : "Hidden card"}
+                aria-label={isOpen ? t("Card showing {emoji}", { emoji: card.emoji }) : t("Hidden card")}
                 aria-pressed={isOpen}
               >
                 <div>
