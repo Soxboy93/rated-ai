@@ -155,19 +155,19 @@ export default function Doodle() {
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
             {tool === "stamp" ? (
               <div role="radiogroup" aria-label={t("Stamp")} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {STAMPS.map(s => <button key={s} role="radio" aria-checked={stamp === s} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: stamp === s ? "4px solid var(--k-brand-2)" : undefined }} onClick={() => setStamp(s)}>{s}</button>)}
+                {STAMPS.map(s => <button key={s} role="radio" aria-checked={stamp === s} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: stamp === s ? "3px solid var(--k-brand)" : undefined }} onClick={() => setStamp(s)}>{s}</button>)}
               </div>
             ) : (
               <div role="radiogroup" aria-label={t("Colour")} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {COLORS.map(c => <button key={c} role="radio" aria-checked={color === c} aria-label={t("Colour {c}", { c })} onClick={() => { setColor(c); if (tool === "eraser") setTool("brush"); }} style={{ width: 38, height: 38, borderRadius: "50%", background: c, border: "3px solid var(--k-ink)", outline: color === c && tool !== "rainbow" ? "4px solid var(--k-brand-2)" : undefined, cursor: "pointer" }} />)}
+                {COLORS.map(c => <button key={c} role="radio" aria-checked={color === c} aria-label={t("Colour {c}", { c })} onClick={() => { setColor(c); if (tool === "eraser") setTool("brush"); }} style={{ width: 38, height: 38, borderRadius: "50%", background: c, border: "1px solid var(--k-line)", outline: color === c && tool !== "rainbow" ? "3px solid var(--k-brand)" : undefined, cursor: "pointer" }} />)}
               </div>
             )}
             <div role="radiogroup" aria-label={t("Size")} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              {SIZES.map(s => <button key={s} role="radio" aria-checked={size === s} aria-label={t("Size {s}", { s })} onClick={() => setSize(s)} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: size === s ? "4px solid var(--k-brand-2)" : undefined }}><span style={{ width: Math.min(s, 30), height: Math.min(s, 30), borderRadius: "50%", background: "var(--k-ink)", display: "block" }} /></button>)}
+              {SIZES.map(s => <button key={s} role="radio" aria-checked={size === s} aria-label={t("Size {s}", { s })} onClick={() => setSize(s)} className="k-btn small light round" style={{ width: 46, minHeight: 46, outline: size === s ? "3px solid var(--k-brand)" : undefined }}><span style={{ width: Math.min(s, 30), height: Math.min(s, 30), borderRadius: "50%", background: "var(--k-ink)", display: "block" }} /></button>)}
             </div>
             <div role="radiogroup" aria-label={t("Paper colour")} style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <span className="k-muted" style={{ fontWeight: 800 }}>{t("Paper")}</span>
-              {BACKGROUNDS.map(c => <button key={c} role="radio" aria-checked={bg === c} aria-label={t("Paper {c}", { c })} onClick={() => changeBackground(c)} style={{ width: 30, height: 30, borderRadius: 8, background: c, border: "3px solid var(--k-ink)", cursor: "pointer", outline: bg === c ? "4px solid var(--k-brand-2)" : undefined }} />)}
+              {BACKGROUNDS.map(c => <button key={c} role="radio" aria-checked={bg === c} aria-label={t("Paper {c}", { c })} onClick={() => changeBackground(c)} style={{ width: 30, height: 30, borderRadius: 8, background: c, border: "1px solid var(--k-line)", cursor: "pointer", outline: bg === c ? "3px solid var(--k-brand)" : undefined }} />)}
             </div>
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function Doodle() {
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={up}
-          style={{ width: "100%", height: "auto", aspectRatio: `${W} / ${H}`, border: "3px solid var(--k-ink)", borderRadius: 22, boxShadow: "0 5px 0 var(--k-ink)", touchAction: "none", cursor: tool === "stamp" ? "copy" : "crosshair", background: "#fff" }}
+          style={{ width: "100%", height: "auto", aspectRatio: `${W} / ${H}`, border: "1px solid var(--k-line)", borderRadius: 22, boxShadow: "var(--k-shadow)", touchAction: "none", cursor: tool === "stamp" ? "copy" : "crosshair", background: "#fff" }}
         />
         <p className="k-muted" style={{ textAlign: "center", fontSize: ".95rem" }}>{saved ? (import.meta.env.VITE_DEMO ? t("Saving a PNG to your device works in the live app. Your drawing never leaves your device.") : t("Saved to your device! Your drawing never leaves it unless you share it.")) : t("Your doodles stay on this device. Press Save to keep one.")}</p>
       </div>

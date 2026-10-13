@@ -36,7 +36,7 @@ export default function Trophies() {
             {BADGES.map(b => {
               const got = earned.has(b.id);
               return (
-                <div key={b.id} className="k-card" style={{ textAlign: "center", display: "grid", gap: 4, justifyItems: "center", opacity: got ? 1 : 0.6, background: got ? undefined : "var(--k-bg)" }}>
+                <div key={b.id} className="k-card" style={{ textAlign: "center", display: "grid", gap: 4, justifyItems: "center", opacity: got ? 1 : 0.6, background: got ? undefined : "transparent" }}>
                   <span style={{ fontSize: "2.8rem", filter: got ? undefined : "grayscale(1) opacity(.5)" }} aria-hidden="true">{got ? b.icon : "🔒"}</span>
                   <h3 style={{ fontSize: "1.15rem" }}>{t(b.name)}</h3>
                   <p className="k-muted" style={{ fontSize: ".9rem" }}>{t(b.description)}</p>

@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { randomRng } from "@shared/rng";
 import { makeMemoryDeck, memoryScore, type Level, type MemoryCard } from "@shared/games";
 import { MIN_MS_PER_QUESTION, levelFromXp } from "@shared/gamification";
+import Avatar from "../Avatar";
 import KidShell from "../Shell";
 import { useChild } from "../ChildContext";
 import { GAME_META, guideById } from "../guides";
@@ -117,13 +118,13 @@ export default function Memory() {
       <KidShell title={meta.name} color={meta.color}>
         <Confetti fire={confetti} />
         <div className="k-card k-in" style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", display: "grid", gap: 14 }}>
-          <img src={guide.art} alt="" width={120} height={120} className="k-bob" style={{ margin: "0 auto" }} />
+          <Avatar guide={guide} size={120} bob />
           <h2 style={{ fontSize: "2.2rem" }}>{t("You found them all!")}</h2>
           <div style={{ fontSize: "3rem" }} role="img" aria-label={t("{n} out of 3 stars", { n: stars })}>
             {[1, 2, 3].map(s => <span key={s} style={{ opacity: s <= stars ? 1 : 0.2 }}>⭐</span>)}
           </div>
           <p className="display" style={{ fontSize: "1.5rem" }}>{t("{pairs} pairs in {moves} moves", { pairs, moves })}</p>
-          {result ? <p className="k-chip k-in" style={{ margin: "0 auto", background: "var(--c-trophy)", color: "#2b2250", fontSize: "1.3rem" }}>{t("+{n} XP", { n: result.xpEarned })}</p>
+          {result ? <p className="k-chip k-in" style={{ margin: "0 auto", background: "var(--k-brand)", color: "#fff", borderColor: "transparent", fontSize: "1.2rem" }}>{t("+{n} XP", { n: result.xpEarned })}</p>
             : saveError ? <p role="alert" style={{ color: "var(--k-bad)", fontWeight: 800 }}>{saveError}</p>
             : <p className="k-muted">{t("Saving your points…")}</p>}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>

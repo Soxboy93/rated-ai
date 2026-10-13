@@ -50,10 +50,11 @@ function PinGate({ hasPin, school }: { hasPin: boolean; school: boolean }) {
     else unlock.mutate({ pin });
   };
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 via-purple-50 to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-teal-50 to-slate-50 flex items-center justify-center p-4">
+      <LanguageSwitch className="fixed top-3 end-3" />
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center"><Lock className="w-8 h-8 text-white" /></div>
+          <div className="mx-auto w-16 h-16 bg-teal-700 rounded-full flex items-center justify-center"><Lock className="w-8 h-8 text-white" /></div>
           <div>
             <CardTitle className="text-2xl">{school ? t("Teacher area") : t("Parent area")}</CardTitle>
             <CardDescription className="mt-2">
@@ -111,7 +112,7 @@ function ConversationsTab({ school }: { school: boolean }) {
                 <summary className="cursor-pointer font-medium">{s.childName || who} · {s.characterId ? t(s.characterId.charAt(0).toUpperCase() + s.characterId.slice(1)) : t("guide")} · {s.createdAt ? fmtDateTime(s.createdAt) : ""} <span className="text-gray-500 font-normal">({t("{n} messages", { n: ms.length })})</span></summary>
                 <div className="mt-3 space-y-2 max-h-96 overflow-y-auto">
                   {ms.map(m => (
-                    <div key={m.id} className={`rounded p-2 border-s-4 ${m.role === "user" ? "border-purple-500 bg-purple-50" : "border-blue-500 bg-blue-50"}`}>
+                    <div key={m.id} className={`rounded p-2 border-s-4 ${m.role === "user" ? "border-teal-600 bg-teal-50" : "border-blue-500 bg-blue-50"}`}>
                       <p className="text-xs text-gray-500">{m.role === "user" ? who : t("AI")} · {m.createdAt ? fmtTime(m.createdAt) : ""}{m.flagged && m.flagged !== "safe" ? ` · ${m.flagged}` : ""}</p>
                       <p className="whitespace-pre-wrap">{m.content}</p>
                     </div>
@@ -149,7 +150,6 @@ function DisplayTab() {
             <span><span className="block font-medium">{t(label)}</span><span className="text-sm text-gray-600">{t(hint)}</span></span>
           </label>
         ))}
-        <LanguageSwitch className="rounded-lg border px-4 py-2 font-medium text-purple-800" />
       </CardContent>
     </Card>
   );
@@ -168,17 +168,18 @@ export default function ParentArea() {
 
   const tabs = school ? SCHOOL_TABS : FAMILY_TABS;
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 via-purple-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-b from-teal-50 to-slate-50">
       <header className="border-b bg-white/90 backdrop-blur sticky top-0 z-10">
         <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center"><Shield className="w-5 h-5 text-white" /></div>
+            <div className="w-10 h-10 rounded-full bg-teal-700 flex items-center justify-center"><Shield className="w-5 h-5 text-white" /></div>
             <div>
               <h1 className="text-xl font-bold">{school ? t("Teacher area") : t("Parent area")}</h1>
               <p className="text-sm text-gray-600">{school ? t("Class progress, activities and privacy") : t("Progress, conversations and privacy")}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <LanguageSwitch />
             <Link href="/"><Button variant="outline" size="sm"><ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" />{school ? t("Students' area") : t("Games")}</Button></Link>
             <Button variant="outline" size="sm" onClick={() => lock.mutate()}><Lock className="w-4 h-4 me-1" />{t("Lock")}</Button>
           </div>
@@ -186,7 +187,7 @@ export default function ParentArea() {
         <nav className="container mx-auto flex gap-1 overflow-x-auto px-4" aria-label={school ? t("Teacher sections") : t("Parent sections")}>
           {tabs.map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
-              className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${tab === id ? "border-purple-600 text-purple-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
+              className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${tab === id ? "border-teal-700 text-teal-800" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
               {t(label)}
             </button>
           ))}

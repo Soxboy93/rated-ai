@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles } from "lucide-react";
+import Logo from "@/kid/Logo";
 import { t, useLang } from "@/i18n";
 import LanguageSwitch from "@/i18n/LanguageSwitch";
 import type { AccountType } from "@shared/jordan";
@@ -35,13 +35,11 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 flex items-center justify-center p-4">
-      <LanguageSwitch className="fixed top-3 end-3 rounded-full border bg-white/80 px-4 py-1.5 text-sm font-semibold text-purple-800" />
+    <div className="min-h-screen bg-gradient-to-b from-teal-50 to-slate-50 flex items-center justify-center p-4">
+      <LanguageSwitch className="fixed top-3 end-3" />
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-3">
-          <div className="mx-auto w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-            <Sparkles className="w-7 h-7 text-white" />
-          </div>
+          <div className="mx-auto"><Logo size={56} /></div>
           <CardTitle className="text-2xl">{t("Rated AI")}</CardTitle>
           <CardDescription>
             {mode === "login"
@@ -62,7 +60,7 @@ export default function AuthPage() {
                     role="radio"
                     aria-checked={accountType === id}
                     onClick={() => setAccountType(id)}
-                    className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${accountType === id ? "border-purple-500 bg-purple-50 text-purple-900" : "border-gray-200 text-gray-700"}`}
+                    className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${accountType === id ? "border-teal-600 bg-teal-50 text-teal-900" : "border-gray-200 text-gray-700"}`}
                   >
                     <span aria-hidden="true">{icon}</span> {label}
                   </button>
@@ -85,12 +83,12 @@ export default function AuthPage() {
               autoComplete={mode === "register" ? "new-password" : "current-password"}
             />
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-            <Button type="submit" disabled={busy} className="w-full bg-gradient-to-r from-purple-500 to-pink-500">
+            <Button type="submit" disabled={busy} className="w-full bg-teal-700 hover:bg-teal-800">
               {busy ? t("Please wait…") : mode === "login" ? t("Sign in") : t("Create account")}
             </Button>
             <button
               type="button"
-              className="w-full text-sm text-purple-700 underline"
+              className="w-full text-sm text-teal-800 underline"
               onClick={() => {
                 setError("");
                 setMode(mode === "login" ? "register" : "login");

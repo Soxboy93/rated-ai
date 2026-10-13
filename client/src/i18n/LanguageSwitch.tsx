@@ -1,8 +1,12 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import type { Lang } from "@shared/jordan";
 import { useLang } from "./index";
 
-/** Switches between Arabic and English. When signed in the choice is also saved on the account. */
+/**
+ * Always-visible two-button language toggle (العربية | English). One tap switches the whole app; when signed in the
+ * choice is also saved on the account.
+ */
 export default function LanguageSwitch({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
   const { lang, setLang } = useLang();
   const { user } = useAuth();
@@ -10,20 +14,15 @@ export default function LanguageSwitch({ className = "", style }: { className?: 
   const save = trpc.auth.setLanguage.useMutation({
     onSuccess: (_d, vars) => utils.auth.me.setData(undefined, u => (u ? { ...u, language: vars.language } : u)),
   });
-  const next = lang === "ar" ? "en" : "ar";
+  const choose = (next: Lang) => {
+    if (next === lang) return;
+    setLang(next);
+    if (user) save.mutate({ language: next });
+  };
   return (
-    <button
-      type="button"
-      className={className}
-      style={style}
-      lang={next}
-      aria-label={next === "ar" ? "التبديل إلى العربية" : "Switch to English"}
-      onClick={() => {
-        setLang(next);
-        if (user) save.mutate({ language: next });
-      }}
-    >
-      {next === "ar" ? "العربية" : "English"}
-    </button>
+    <div className={`lang-toggle ${className}`} style={style} role="group" aria-label="اللغة / Language">
+      <button type="button" lang="ar" aria-pressed={lang === "ar"} onClick={() => choose("ar")}>العربية</button>
+      <button type="button" lang="en" aria-pressed={lang === "en"} onClick={() => choose("en")}>English</button>
+    </div>
   );
 }

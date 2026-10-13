@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import Avatar from "./Avatar";
 import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { guideById } from "./guides";
@@ -61,7 +62,7 @@ export default function Homework() {
       <div style={{ display: "grid", gap: 18, maxWidth: 820, margin: "0 auto" }}>
         <section className="k-card" style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <img src={guide.art} alt="" width={90} height={90} className="k-bob" />
+            <Avatar guide={guide} size={90} bob />
             <div>
               <h2 style={{ fontSize: "1.8rem" }}>{t("Stuck on homework?")}</h2>
               <p className="k-muted">{t("Take a photo of the problem. I'll show you how to solve it one step at a time. Try it yourself first!")}</p>
@@ -77,10 +78,10 @@ export default function Homework() {
             <button className="k-btn" style={{ ["--c" as string]: "var(--c-homework)" }} onClick={() => fileRef.current?.click()}>📷 {preview ? t("Choose another photo") : t("Take or choose a photo")}</button>
             {preview && <button className="k-btn" style={{ ["--c" as string]: "var(--c-memory)" }} onClick={help} disabled={analyze.isPending}>{analyze.isPending ? t("Looking…") : `🔍 ${t("Help me!")}`}</button>}
           </div>
-          {preview && <img src={preview} alt={t("Your homework")} style={{ maxHeight: 280, maxWidth: "100%", objectFit: "contain", border: "3px solid var(--k-ink)", borderRadius: 16 }} />}
+          {preview && <img src={preview} alt={t("Your homework")} style={{ maxHeight: 280, maxWidth: "100%", objectFit: "contain", border: "1px solid var(--k-line)", borderRadius: 16 }} />}
         </section>
 
-        {error && <p role="alert" className="k-card" style={{ background: "#ffe3e3", color: "#6b1217", fontWeight: 800 }}>{error}</p>}
+        {error && <p role="alert" className="k-card k-note-bad">{error}</p>}
 
         {solution && (
           <section className="k-card k-in" style={{ display: "grid", gap: 14 }} aria-live="polite">
@@ -89,7 +90,7 @@ export default function Homework() {
             {total === 0 && <p className="k-muted">{t("I couldn't find a homework problem in that photo. Try a clearer picture.")}</p>}
             <ol style={{ display: "grid", gap: 10, listStyle: "none", padding: 0, margin: 0 }}>
               {solution.steps.slice(0, shown).map((s, n) => (
-                <li key={n} className="k-card k-in" style={{ display: "flex", gap: 12, alignItems: "flex-start", boxShadow: "0 3px 0 var(--k-ink)" }}>
+                <li key={n} className="k-card k-in" style={{ display: "flex", gap: 12, alignItems: "flex-start", boxShadow: "var(--k-shadow)" }}>
                   <span className="k-chip" style={{ background: "var(--c-homework)", color: "#fff", flex: "none" }}>{t("Step {n}", { n: n + 1 })}</span>
                   <span style={{ flex: 1, fontSize: "1.1rem" }}>{s}</span>
                   {canSpeakIn() && <button className="k-btn small light round" style={{ minHeight: 40, width: 40 }} onClick={() => speak(s)} aria-label={t("Read step {n} aloud", { n: n + 1 })}>🔊</button>}
@@ -102,7 +103,7 @@ export default function Homework() {
               </button>
             )}
             {allShown && total > 0 && (
-              <div className="k-card k-in" style={{ background: "#b8f2d4", color: "#0d4a30", display: "grid", gap: 6 }}>
+              <div className="k-card k-in" style={{ background: "#dcf5e8", color: "#0d4a30", borderColor: "#9fdcbd", display: "grid", gap: 6 }}>
                 <h3 style={{ fontSize: "1.3rem" }}>✅ {t("Answer:")} {solution.answer}</h3>
                 <p>{solution.explanation}</p>
               </div>

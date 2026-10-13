@@ -46,7 +46,7 @@ export default function Pet() {
           <div role="radiogroup" aria-label={t("Pet type")} style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
             {PET_TYPES.map(pt => (
               <button key={pt.id} role="radio" aria-checked={type === pt.id} className="k-tile" onClick={() => { setType(pt.id); playSound("tap"); }}
-                style={{ ["--c" as string]: "var(--c-pet)", minHeight: 130, alignItems: "center", textAlign: "center", outline: type === pt.id ? "5px solid var(--k-ink)" : undefined }}>
+                style={{ ["--c" as string]: "var(--c-pet)", minHeight: 130, alignItems: "center", textAlign: "center", outline: type === pt.id ? "3px solid var(--k-brand)" : undefined }}>
                 <span className="icon" aria-hidden="true" style={{ fontSize: "3.6rem" }}>{pt.emoji}</span>
                 <span className="name">{t(pt.name)}</span>
               </button>
@@ -73,7 +73,7 @@ export default function Pet() {
   return (
     <KidShell title={t("My Pet")} color="var(--c-pet)">
       <div style={{ display: "grid", gap: 18, maxWidth: 720, margin: "0 auto" }}>
-        <section className="k-card" style={{ textAlign: "center", display: "grid", gap: 10, background: "linear-gradient(#bfe6ff 0 62%, #8be08f 62% 100%)", color: "#2b2250", overflow: "hidden" }}>
+        <section className="k-card" style={{ textAlign: "center", display: "grid", gap: 10, background: "linear-gradient(#d6ecff 0 64%, #bfe8c4 64% 100%)", color: "#172033", overflow: "hidden" }}>
           <h2 style={{ fontSize: "1.8rem" }}>{pet.name}</h2>
           <p style={{ fontWeight: 800 }}>{t(stage.name)} {t(meta.name)} · {t("Level {level}", { level: pet.level ?? 1 })}</p>
           <div style={{ fontSize: "7rem", lineHeight: 1, transform: `scale(${stage.scale})`, animation: bounce ? "k-pop .5s ease" : "k-bob 3s ease-in-out infinite", transition: "transform .6s" }} role="img" aria-label={t("{type} named {name}", { type: t(meta.name), name: pet.name })}>

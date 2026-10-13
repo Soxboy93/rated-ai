@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { makeRng, randomRng } from "@shared/rng";
 import type { Choice, Level } from "@shared/games";
 import { MIN_MS_PER_QUESTION, levelFromXp, type GameId } from "@shared/gamification";
+import Avatar from "../Avatar";
 import KidShell from "../Shell";
 import { useChild } from "../ChildContext";
 import { GAME_META, guideById } from "../guides";
@@ -208,7 +209,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
       <KidShell title={meta.name} color={meta.color}>
         <Confetti fire={confetti} />
         <div className="k-card k-in" style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", display: "grid", gap: 14 }}>
-          <img src={guide.art} alt="" width={120} height={120} className="k-bob" style={{ margin: "0 auto" }} />
+          <Avatar guide={guide} size={120} bob />
           <h2 style={{ fontSize: "2.2rem" }}>{pct === 1 ? t("Perfect round!") : pct >= 0.6 ? t("Awesome work!") : t("Nice try!")}</h2>
           <div style={{ fontSize: "3rem" }} role="img" aria-label={t("{n} out of 3 stars", { n: stars })}>
             {[1, 2, 3].map(s => <span key={s} style={{ opacity: s <= stars ? 1 : 0.2, display: "inline-block", animation: s <= stars ? `k-pop .5s ${s * 0.18}s both` : undefined }}>⭐</span>)}
@@ -216,7 +217,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
           <p className="display" style={{ fontSize: "1.6rem" }}>{t("{a} out of {b} right", { a: correct, b: total })}</p>
           {bestCombo >= 3 && <p className="k-chip" style={{ margin: "0 auto" }}>🔥 {t("Best streak: {n} in a row", { n: bestCombo })}</p>}
           {result ? (
-            <p className="k-chip k-in" style={{ margin: "0 auto", background: "var(--c-trophy)", color: "#2b2250", fontSize: "1.3rem" }}>{t("+{n} XP", { n: result.xpEarned })}</p>
+            <p className="k-chip k-in" style={{ margin: "0 auto", background: "var(--k-brand)", color: "#fff", borderColor: "transparent", fontSize: "1.2rem" }}>{t("+{n} XP", { n: result.xpEarned })}</p>
           ) : saveError ? (
             <p role="alert" style={{ color: "var(--k-bad)", fontWeight: 800 }}>{saveError}</p>
           ) : (
@@ -242,7 +243,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
             <i style={{ width: `${Math.max(4, progressPct)}%` }} />
           </div>
           <span className="k-chip">{i + 1} / {round.length}</span>
-          {combo >= 2 && <span className="k-chip k-in" style={{ background: "#ffe08a", color: "#2b2250" }}><span className="k-flame" aria-hidden="true">🔥</span> {combo}</span>}
+          {combo >= 2 && <span className="k-chip k-in" style={{ background: "#fff0c2", color: "#6e4300", borderColor: "#f0d391" }}><span className="k-flame" aria-hidden="true">🔥</span> {combo}</span>}
         </div>
 
         <section className="k-card k-in" key={i} style={{ display: "grid", gap: 14 }} aria-live="polite">
@@ -258,10 +259,10 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
             <h2 style={{ flex: 1, minWidth: 0, fontSize: "clamp(1.7rem, 6vw, 2.6rem)", textAlign: autoSpeak ? "center" : "start", overflowWrap: "anywhere" }}>
               {autoSpeak ? q.prompt : <Prompt text={q.prompt} />}
             </h2>
-            <img src={guide.art} alt="" width={84} height={84} className={feedback?.right ? "k-bob" : undefined} style={{ flex: "none", transition: "transform .3s", transform: feedback && !feedback.right ? "rotate(-8deg)" : undefined }} />
+            <Avatar guide={guide} size={84} bob />
           </div>
           {clueMode && q.clue && (
-            <p className="k-chip" style={{ justifySelf: "center", fontSize: "1.2rem", background: "var(--c-trophy)", color: "#2b2250" }}>💡 {t("Clue:")} {q.clue}</p>
+            <p className="k-chip" style={{ justifySelf: "center", fontSize: "1.2rem", background: "#fff0c2", color: "#6e4300", borderColor: "#f0d391" }}>💡 {t("Clue:")} {q.clue}</p>
           )}
         </section>
 
@@ -280,8 +281,8 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
         </div>
 
         {feedback && (
-          <div className="k-card k-in" role="status" style={{ display: "flex", gap: 14, alignItems: "center", background: feedback.right ? "#b8f2d4" : "#ffe3e3", color: "#2b2250" }}>
-            <img src={guide.art} alt="" width={64} height={64} />
+          <div className="k-card k-in" role="status" style={{ display: "flex", gap: 14, alignItems: "center", background: feedback.right ? "#dcf5e8" : "#fde4e6", color: "#172033", borderColor: feedback.right ? "#9fdcbd" : "#f3b3b9" }}>
+            <Avatar guide={guide} size={64} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <p className="display" style={{ fontSize: "1.3rem" }}>{feedback.text}</p>
               {q.explain && <p style={{ fontWeight: 700 }}>{q.explain}</p>}

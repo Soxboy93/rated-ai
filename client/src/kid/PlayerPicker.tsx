@@ -7,6 +7,8 @@ import { useChild } from "./ChildContext";
 import { GUIDES, guideById } from "./guides";
 import { playSound } from "./sound";
 import KidShell from "./Shell";
+import Avatar from "./Avatar";
+import Logo from "./Logo";
 import { t } from "@/i18n";
 
 const CLASS_KEY = "ra_class";
@@ -30,9 +32,9 @@ export default function PlayerPicker() {
     <KidShell title={t("Who's playing?")} home>
       <div style={{ display: "grid", gap: 22 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <img src="/art/logo.webp" alt="" width={84} height={84} className="k-bob" />
+          <Logo size={64} />
           <div>
-            <h2 style={{ fontSize: "2.4rem" }}>{t("Who's playing?")}</h2>
+            <h2 style={{ fontSize: "clamp(1.7rem, 5vw, 2.3rem)" }}>{t("Who's playing?")}</h2>
             <p className="k-muted">{t("Tap your name to start your adventure.")}</p>
           </div>
         </div>
@@ -65,10 +67,10 @@ export default function PlayerPicker() {
                   key={p.id}
                   type="button"
                   className="k-tile k-in"
-                  style={{ ["--c" as string]: guide.color, minHeight: school ? 170 : 230, alignItems: "center", textAlign: "center", animationDelay: `${Math.min(i, 12) * 50}ms` }}
+                  style={{ ["--c" as string]: guide.color, minHeight: school ? 150 : 200, alignItems: "center", justifyContent: "center", textAlign: "center", animationDelay: `${Math.min(i, 12) * 50}ms` }}
                   onClick={() => { playSound("correct"); selectChild(p.id); }}
                 >
-                  <img src={guide.art} alt="" width={school ? 80 : 120} height={school ? 80 : 120} className="k-bob" style={{ filter: "drop-shadow(0 4px 0 rgba(0,0,0,.25))" }} />
+                  <Avatar guide={guide} size={school ? 64 : 92} bob />
                   <span className="name" style={{ fontSize: school ? "1.4rem" : "1.8rem" }}><bdi>{p.childName}</bdi></span>
                   {!school && <span className="sub">{t(AGE_GROUPS[p.ageGroup].name)}</span>}
                 </button>

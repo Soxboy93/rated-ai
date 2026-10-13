@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import Avatar from "./Avatar";
 import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { guideById } from "./guides";
@@ -68,7 +69,7 @@ export default function Story() {
       <div style={{ display: "grid", gap: 20, maxWidth: 820, margin: "0 auto" }}>
         <section className="k-card" style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <img src={guide.art} alt="" width={90} height={90} className="k-bob" />
+            <Avatar guide={guide} size={90} bob />
             <div>
               <h2 style={{ fontSize: "1.8rem" }}>{t("What should the story be about?")}</h2>
               <p className="k-muted">{t("Pick an idea or type your own.")}</p>
@@ -80,29 +81,29 @@ export default function Story() {
           </div>
           <form onSubmit={e => { e.preventDefault(); void make(idea); }} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <input className="k-input" style={{ flex: 1, minWidth: 200 }} value={idea} onChange={e => setIdea(e.target.value)} maxLength={500} placeholder={t("A story about…")} aria-label={t("Story idea")} />
-            <button className="k-btn" style={{ ["--c" as string]: "var(--c-story)", color: "#2b2250", textShadow: "none" }} disabled={!idea.trim() || gen.isPending}>✨ {t("Make my story")}</button>
+            <button className="k-btn" style={{ ["--c" as string]: "var(--c-story)" }} disabled={!idea.trim() || gen.isPending}>✨ {t("Make my story")}</button>
           </form>
         </section>
 
         {gen.isPending && (
           <div className="k-card k-in" style={{ textAlign: "center" }}>
-            <img src={guide.art} alt="" width={110} height={110} className="k-bob" style={{ margin: "0 auto" }} />
+            <Avatar guide={guide} size={110} bob />
             <p className="display" style={{ fontSize: "1.5rem" }}>{t("{name} is writing your story…", { name: guide.short })}</p>
           </div>
         )}
-        {error && <p role="alert" className="k-card" style={{ background: "#ffe3e3", color: "#6b1217", fontWeight: 800 }}>{error}</p>}
+        {error && <p role="alert" className="k-card k-note-bad">{error}</p>}
 
         {story && (
-          <article className="k-card k-in" style={{ display: "grid", gap: 14, background: "#fffbe8", color: "#2b2250" }}>
+          <article className="k-card k-in" style={{ display: "grid", gap: 14, background: "#fffdf6", color: "#172033" }}>
             <h2 style={{ fontSize: "1.7rem", textTransform: "capitalize" }}>{story.idea}</h2>
-            {picture && <img src={picture} alt={t("An illustration of {idea}", { idea: story.idea })} style={{ width: "100%", maxWidth: 420, margin: "0 auto", border: "3px solid #2b2250", borderRadius: 18 }} />}
+            {picture && <img src={picture} alt={t("An illustration of {idea}", { idea: story.idea })} style={{ width: "100%", maxWidth: 420, margin: "0 auto", border: "1px solid var(--k-line)", borderRadius: 18 }} />}
             <div style={{ display: "grid", gap: 12, fontSize: "1.2rem", lineHeight: 1.7 }}>
               {story.text.split(/\n{2,}/).map((p, n) => <p key={n}>{p}</p>)}
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {canSpeakIn() && <button className="k-btn small" onClick={toggleRead}>{reading ? `⏹ ${t("Stop")}` : `🔊 ${t("Read it to me")}`}</button>}
-              <button className="k-btn small light" style={{ color: "#2b2250" }} onClick={picture1} disabled={draw.isPending}>{draw.isPending ? t("Painting…") : picture ? `🖼 ${t("New picture")}` : `🖼 ${t("Make a picture")}`}</button>
-              <button className="k-btn small light" style={{ color: "#2b2250" }} onClick={() => { setStory(null); setPicture(null); setIdea(""); stopSpeaking(); }}>🔁 {t("New story")}</button>
+              <button className="k-btn small light" onClick={picture1} disabled={draw.isPending}>{draw.isPending ? t("Painting…") : picture ? `🖼 ${t("New picture")}` : `🖼 ${t("Make a picture")}`}</button>
+              <button className="k-btn small light" onClick={() => { setStory(null); setPicture(null); setIdea(""); stopSpeaking(); }}>🔁 {t("New story")}</button>
             </div>
           </article>
         )}

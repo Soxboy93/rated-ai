@@ -20,7 +20,7 @@ const inline = text => text.replace(/\/art\/[a-z]+\.webp/g, m => art[m] ?? m);
 const html = `<meta charset="utf-8">
 <title>Rated AI Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Lexend:wght@400;600&family=Nunito:wght@400;600;700;800&family=Baloo+Bhaijaan+2:wght@500;600;700&family=Cairo:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600&family=Nunito:wght@400;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap">
 <style>${inline(css)}</style>
 <div id="root"></div>
 <script type="module">${inline(js).replace(/<\/script/gi, "<\\/script")}</script>

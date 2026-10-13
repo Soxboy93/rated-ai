@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { MOODS } from "@shared/gamification";
+import Avatar from "./Avatar";
 import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { MOOD_META, guideById } from "./guides";
@@ -21,7 +22,7 @@ function Breathing({ onDone }: { onDone: () => void }) {
   return (
     <div className="k-card" style={{ textAlign: "center", display: "grid", gap: 14, justifyItems: "center" }}>
       <h3 style={{ fontSize: "1.5rem" }}>{finished ? t("Nice and calm. Well done!") : t(PHASES[step % 3][0])}</h3>
-      <div aria-hidden="true" style={{ width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #fff8, var(--c-mood))", border: "3px solid var(--k-ink)", animation: finished ? undefined : "k-breathe 12s ease-in-out infinite" }} />
+      <div aria-hidden="true" style={{ width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #fff8, var(--c-mood))", border: "1px solid var(--k-line)", animation: finished ? undefined : "k-breathe 12s ease-in-out infinite" }} />
       <p className="k-muted">{finished ? t("Take one more slow breath if you like.") : t("Breath {n} of 3. Follow the bubble.", { n: Math.floor(step / 3) + 1 })}</p>
       <button className="k-btn small light" onClick={onDone}>{finished ? t("Done") : t("Skip")}</button>
     </div>
@@ -57,13 +58,13 @@ export default function Mood() {
       <KidShell title={t("How I Feel")} color="var(--c-mood)">
         <div style={{ display: "grid", gap: 16, maxWidth: 640, margin: "0 auto" }}>
           <div className="k-card k-in" style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <img src={guide.art} alt="" width={100} height={100} className="k-bob" />
+            <Avatar guide={guide} size={100} bob />
             <div>
               <h2 style={{ fontSize: "1.6rem" }}>{t("Thanks for telling me")} {m.emoji}</h2>
               <p style={{ fontSize: "1.15rem", marginTop: 6 }}>{done.reply}</p>
             </div>
           </div>
-          {done.flagged && <p className="k-card" style={{ background: "#fff4d6", color: "#6e4300", fontWeight: 800 }}>{t("Your grown-up can see this check-in so they can help.")}</p>}
+          {done.flagged && <p className="k-card k-note-warn">{t("Your grown-up can see this check-in so they can help.")}</p>}
           {["worried", "angry", "sad", "tired"].includes(mood) && !breathing && (
             <button className="k-btn" style={{ ["--c" as string]: "var(--c-memory)" }} onClick={() => setBreathing(true)}>🫧 {t("Try a calm breathing break")}</button>
           )}
@@ -81,7 +82,7 @@ export default function Mood() {
     <KidShell title={t("How I Feel")} color="var(--c-mood)">
       <div style={{ display: "grid", gap: 20, maxWidth: 820, margin: "0 auto" }}>
         <div className="k-card" style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <img src={guide.art} alt="" width={100} height={100} className="k-bob" />
+          <Avatar guide={guide} size={100} bob />
           <div>
             <h2 style={{ fontSize: "2rem" }}>{t("How are you feeling?")}</h2>
             <p className="k-muted">{t("Tap the face that fits best. There are no wrong answers.")}{progress?.lastMood ? ` ${t("Last time you felt {mood}.", { mood: MOOD_META[progress.lastMood] ? MOOD_META[progress.lastMood].label : progress.lastMood })}` : ""}</p>
@@ -93,7 +94,7 @@ export default function Mood() {
             const on = mood === id;
             return (
               <button key={id} role="radio" aria-checked={on} className="k-tile" onClick={() => { setMood(id); playSound("tap"); }}
-                style={{ ["--c" as string]: m.color, minHeight: 140, alignItems: "center", textAlign: "center", outline: on ? "5px solid var(--k-ink)" : undefined, transform: on ? "scale(1.05)" : undefined, color: "#2b2250" }}>
+                style={{ ["--c" as string]: m.color, minHeight: 140, alignItems: "center", textAlign: "center", outline: on ? "3px solid var(--k-brand)" : undefined, transform: on ? "scale(1.05)" : undefined, color: "#2b2250" }}>
                 <span className="icon" aria-hidden="true" style={{ fontSize: "3.4rem" }}>{m.emoji}</span>
                 <span className="name" style={{ textShadow: "none" }}>{m.label}</span>
               </button>
@@ -110,7 +111,7 @@ export default function Mood() {
               </>
             )}
             {error && <p role="alert" style={{ color: "var(--k-bad)", fontWeight: 800 }}>{error}</p>}
-            <div><button className="k-btn" style={{ ["--c" as string]: "var(--c-mood)", color: "#2b2250", textShadow: "none" }} onClick={submit} disabled={checkin.isPending}>{t("Save my check-in")}</button></div>
+            <div><button className="k-btn" style={{ ["--c" as string]: "var(--c-mood)" }} onClick={submit} disabled={checkin.isPending}>{t("Save my check-in")}</button></div>
           </div>
         )}
       </div>

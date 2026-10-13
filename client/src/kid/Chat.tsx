@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import Avatar from "./Avatar";
 import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { GUIDES, guideById, type Guide } from "./guides";
@@ -69,7 +70,7 @@ export default function Chat() {
           {GUIDES.map(g => (
             <button key={g.id} role="radio" aria-checked={g.id === guide.id} onClick={() => pickGuide(g)} className="k-chip"
               style={{ cursor: "pointer", background: g.id === guide.id ? g.color : undefined, color: g.id === guide.id ? "#fff" : undefined, paddingInline: 8 }}>
-              <img src={g.art} alt="" width={32} height={32} /> {g.short}
+              <Avatar guide={g} size={32} /> {g.short}
             </button>
           ))}
           {canSpeakIn() && (
@@ -84,7 +85,7 @@ export default function Chat() {
           <div role="log" aria-live="polite" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12, minHeight: 360, maxHeight: "58vh", overflowY: "auto" }}>
             {messages.length === 0 && !pending && (
               <div className="k-in" style={{ display: "flex", gap: 14, alignItems: "center", margin: "auto", textAlign: "center", flexDirection: "column" }}>
-                <img src={guide.art} alt={guide.name} width={150} height={150} className="k-bob" />
+                <Avatar guide={guide} size={150} bob />
                 <h2 style={{ fontSize: "1.7rem" }}>{guide.greetings[0]}</h2>
                 <p className="k-muted">{guide.name}</p>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
@@ -103,18 +104,18 @@ export default function Chat() {
             {pending && <div className="k-bubble me">{pending}</div>}
             {busy && (
               <div className="k-bubble ai" aria-label={t("{name} is thinking", { name: guide.short })} style={{ display: "flex", gap: 6 }}>
-                {[0, 1, 2].map(n => <span key={n} style={{ width: 12, height: 12, borderRadius: "50%", background: guide.color, border: "2px solid var(--k-ink)", animation: `k-bob 0.9s ${n * 0.15}s infinite` }} />)}
+                {[0, 1, 2].map(n => <span key={n} style={{ width: 12, height: 12, borderRadius: "50%", background: guide.color, animation: `k-bob 0.9s ${n * 0.15}s infinite` }} />)}
               </div>
             )}
             <div ref={endRef} />
           </div>
-          <form onSubmit={e => { e.preventDefault(); void ask(text); }} style={{ display: "flex", gap: 10, padding: 14, borderTop: "3px solid var(--k-ink)", background: "var(--k-bg)" }}>
+          <form onSubmit={e => { e.preventDefault(); void ask(text); }} style={{ display: "flex", gap: 10, padding: 14, borderTop: "1px solid var(--k-line)", background: "color-mix(in srgb, var(--k-ink) 3%, var(--k-card))" }}>
             <input className="k-input" value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder={listening ? t("Listening…") : t("Ask {name} anything…", { name: guide.short })} aria-label={t("Your message")} disabled={busy} />
             {canListen && <button type="button" className="k-btn light round" onClick={mic} disabled={busy || listening} aria-label={t("Speak your message")}>{listening ? "👂" : "🎤"}</button>}
             <button type="submit" className="k-btn" style={{ ["--c" as string]: guide.color, whiteSpace: "nowrap" }} disabled={busy || !text.trim()}>{t("Send")} {currentLang() === "ar" ? "⬅" : "➤"}</button>
           </form>
         </section>
-        {error && <p role="alert" className="k-card" style={{ background: "#ffe3e3", color: "#6b1217", fontWeight: 800 }}>{error}</p>}
+        {error && <p role="alert" className="k-card k-note-bad">{error}</p>}
         <p className="k-muted" style={{ fontSize: ".9rem", textAlign: "center" }}>{t("Your grown-up can read your chats. Never share your full name, address or phone number.")}</p>
       </div>
     </KidShell>
