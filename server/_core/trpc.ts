@@ -4,7 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { isParentUnlocked } from "./auth";
 import * as db from "../db";
-import { CONSENT_VERSION } from "@shared/consent";
+import { consentVersionFor } from "@shared/consent";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -55,22 +55,22 @@ export const parentProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
-async function assertConsent(userId: string) {
+async function assertConsent(user: { id: string; accountType?: string | null }) {
   // Consent given for older wording does not count: the parent must agree to the current text.
-  const consent = await db.getActiveConsent(userId);
-  if (!consent || consent.version !== CONSENT_VERSION) {
+  const consent = await db.getActiveConsent(user.id);
+  if (!consent || consent.version !== consentVersionFor(user.accountType === "school" ? "school" : "family")) {
     throw new TRPCError({ code: "FORBIDDEN", message: CONSENT_REQUIRED_ERR_MSG });
   }
 }
 
 /** Signed in AND the parent has granted (and not withdrawn) consent. Use for anything that handles a child's data. */
 export const consentedProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  await assertConsent(ctx.user.id);
+  await assertConsent(ctx.user);
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
 /** Parent PIN unlocked AND consent active: for managing child profiles. */
 export const consentedParentProcedure = parentProcedure.use(async ({ ctx, next }) => {
-  await assertConsent(ctx.user.id);
+  await assertConsent(ctx.user);
   return next({ ctx: { ...ctx, user: ctx.user } });
 });

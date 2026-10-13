@@ -12,6 +12,10 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // "family": a parent with their own children. "school": a teacher running one or more classes.
+  accountType: mysqlEnum("accountType", ["family", "school"]).default("family").notNull(),
+  // Preferred interface language; null means "follow the device".
+  language: mysqlEnum("language", ["ar", "en"]),
   createdAt: timestamp("createdAt").defaultNow(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow(),
 });
@@ -28,6 +32,8 @@ export const chatSessions = mysqlTable("chatSessions", {
   childName: varchar("childName", { length: 100 }),
   // Which child profile this chat belongs to (null for chats created before profiles existed).
   profileId: varchar("profileId", { length: 64 }),
+  // Language the child is chatting in; decides the AI's reply language and the safety replies.
+  language: mysqlEnum("language", ["ar", "en"]),
   characterId: varchar("characterId", { length: 50 }),
   ageGroup: mysqlEnum("ageGroup", ["kids", "tweens", "teens"]),
   createdAt: timestamp("createdAt").defaultNow(),
@@ -79,6 +85,8 @@ export const userProfiles = mysqlTable("userProfiles", {
   ageGroup: mysqlEnum("ageGroup", ["kids", "tweens", "teens"]).notNull(),
   selectedCharacter: varchar("selectedCharacter", { length: 50 }),
   avatar: varchar("avatar", { length: 10 }),
+  // School accounts: the class this student belongs to (null for family children and unassigned students).
+  classId: varchar("classId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow(),
 });
 
@@ -536,6 +544,8 @@ export const parentalConsents = mysqlTable("parental_consents", {
   userId: varchar("userId", { length: 64 }).notNull(),
   version: varchar("version", { length: 40 }).notNull(),
   textSha256: varchar("textSha256", { length: 64 }).notNull(),
+  // Language of the wording that was shown (the hash covers that exact text).
+  language: varchar("language", { length: 2 }),
   grantedAt: timestamp("grantedAt", { fsp: 3 }).defaultNow(),
   revokedAt: timestamp("revokedAt", { fsp: 3 }),
 });
@@ -602,4 +612,27 @@ export const moodCheckins = mysqlTable("mood_checkins", {
   note: varchar("note", { length: 200 }),
   flagged: mysqlEnum("flagged", ["safe", "review", "blocked"]).default("safe"),
   createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+});
+
+
+/** A class run by a teacher (school accounts). Students are userProfiles rows with classId set. */
+export const schoolClasses = mysqlTable("school_classes", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  grade: int("grade").notNull(),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+});
+
+/** An activity a teacher sets for a class: play a game (at least a given level). */
+export const classAssignments = mysqlTable("class_assignments", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  classId: varchar("classId", { length: 64 }).notNull(),
+  game: varchar("game", { length: 20 }).notNull(),
+  level: int("level").notNull().default(1),
+  note: varchar("note", { length: 200 }),
+  dueDate: varchar("dueDate", { length: 10 }),
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow(),
+  archivedAt: timestamp("archivedAt", { fsp: 3 }),
 });

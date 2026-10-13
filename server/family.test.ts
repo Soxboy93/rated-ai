@@ -19,6 +19,7 @@ const store = vi.hoisted(() => ({
   logAudit: vi.fn(),
   listAuditEvents: vi.fn(),
   listProfiles: vi.fn(),
+  countUserProfiles: vi.fn(),
   getProfile: vi.fn(),
   createProfile: vi.fn(),
   updateProfile: vi.fn(),
@@ -52,6 +53,7 @@ beforeEach(() => {
   resetRateLimits();
   store.getActiveConsent.mockResolvedValue(activeConsent);
   store.listProfiles.mockResolvedValue([]);
+  store.countUserProfiles.mockResolvedValue(0);
 });
 
 describe("consent gate", () => {
@@ -69,7 +71,7 @@ describe("consent gate", () => {
     const { api } = await caller();
     await api.consent.grant({ version: CONSENT_VERSION, confirmParent: true });
     expect(store.createConsent).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-a", version: CONSENT_VERSION, textSha256: expect.stringMatching(/^[0-9a-f]{64}$/) }));
-    expect(store.logAudit).toHaveBeenCalledWith("user-a", "consent_granted", CONSENT_VERSION);
+    expect(store.logAudit).toHaveBeenCalledWith("user-a", "consent_granted", `${CONSENT_VERSION} (en)`);
 
     store.createConsent.mockClear();
     store.getActiveConsent.mockResolvedValue(activeConsent);
@@ -117,7 +119,7 @@ describe("child profiles", () => {
   });
 
   it("limits a family to six children", async () => {
-    store.listProfiles.mockResolvedValue(Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, userId: "user-a" })));
+    store.countUserProfiles.mockResolvedValue(6);
     await expect((await caller({ unlocked: true })).api.profiles.create({ childName: "Sam", ageGroup: "kids" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
@@ -125,7 +127,7 @@ describe("child profiles", () => {
     store.listProfiles.mockResolvedValue([{ id: "p1", userId: "user-a", childName: "Mia", ageGroup: "kids", selectedCharacter: "sage", avatar: null, createdAt: new Date() }]);
     const list = await (await caller()).api.profiles.list();
     expect(store.listProfiles).toHaveBeenCalledWith("user-a");
-    expect(Object.keys(list[0]).sort()).toEqual(["ageGroup", "childName", "id", "selectedCharacter"]);
+    expect(Object.keys(list[0]).sort()).toEqual(["ageGroup", "childName", "classId", "id", "selectedCharacter"]);
   });
 
   it("cannot modify, export or delete another family's child", async () => {

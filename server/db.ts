@@ -1,7 +1,8 @@
-import { and, eq, desc, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, desc, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import * as schema from "../drizzle/schema";
 import { BADGES, earnedBadgeIds, levelFromXp, nextStreak, xpForPlay, type GameId, type ProgressStats } from "../shared/gamification";
+import type { StudentAggregate } from "../shared/classroom";
 import { InsertUser, users, accessibilitySettings, InsertAccessibilitySettings, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -522,7 +523,7 @@ export async function deleteAllUserData(userId: string) {
       schema.storyCreations, schema.moodEntries, schema.readingSessions, schema.learningStreaks,
       schema.userQuests, schema.smartMoments, schema.progressMetrics, schema.studyReminders,
       schema.collegePrepProgress, schema.challengeParticipants, schema.parentalConsents, schema.auditEvents,
-      schema.childProgress, schema.gamePlays, schema.childBadges, schema.moodCheckins,
+      schema.childProgress, schema.gamePlays, schema.childBadges, schema.moodCheckins, schema.schoolClasses, schema.classAssignments,
     ] as const;
     for (const table of byUserId) {
       await tx.delete(table).where(eq((table as any).userId, userId));
@@ -681,3 +682,164 @@ export async function getProfileProgressExport(profileId: string) {
 }
 
 export { BADGES };
+
+
+// ---------------------------------------------------------------------------
+// Classes, assignments and the teacher's class overview (school accounts)
+// ---------------------------------------------------------------------------
+export async function listClasses(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(schema.schoolClasses).where(eq(schema.schoolClasses.userId, userId)).orderBy(schema.schoolClasses.grade, schema.schoolClasses.name);
+}
+
+export async function getClass(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(schema.schoolClasses).where(eq(schema.schoolClasses.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createClass(data: typeof schema.schoolClasses.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(schema.schoolClasses).values({ ...data, createdAt: new Date() });
+}
+
+export async function updateClass(id: string, updates: Partial<typeof schema.schoolClasses.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(schema.schoolClasses).set(updates).where(eq(schema.schoolClasses.id, id));
+}
+
+/** Delete a class and its assignments; its students stay but become unassigned. */
+export async function deleteClass(userId: string, classId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async tx => {
+    await tx.update(schema.userProfiles).set({ classId: null }).where(and(eq(schema.userProfiles.userId, userId), eq(schema.userProfiles.classId, classId)));
+    await tx.delete(schema.classAssignments).where(and(eq(schema.classAssignments.userId, userId), eq(schema.classAssignments.classId, classId)));
+    await tx.delete(schema.schoolClasses).where(and(eq(schema.schoolClasses.id, classId), eq(schema.schoolClasses.userId, userId)));
+  });
+}
+
+export async function countClassStudents(classId: string) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [r] = await db.select({ n: sql<string>`COUNT(*)` }).from(schema.userProfiles).where(eq(schema.userProfiles.classId, classId));
+  return Number(r?.n ?? 0);
+}
+
+export async function listClassProfiles(userId: string, classId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(schema.userProfiles).where(and(eq(schema.userProfiles.userId, userId), eq(schema.userProfiles.classId, classId))).orderBy(schema.userProfiles.childName);
+}
+
+export async function listAssignments(userId: string, classId: string, includeArchived = false) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = and(eq(schema.classAssignments.userId, userId), eq(schema.classAssignments.classId, classId), includeArchived ? undefined : isNull(schema.classAssignments.archivedAt));
+  return db.select().from(schema.classAssignments).where(where).orderBy(desc(schema.classAssignments.createdAt));
+}
+
+export async function getAssignment(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(schema.classAssignments).where(eq(schema.classAssignments.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createAssignment(data: typeof schema.classAssignments.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(schema.classAssignments).values({ ...data, createdAt: new Date() });
+}
+
+export async function archiveAssignment(id: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(schema.classAssignments).set({ archivedAt: new Date() }).where(eq(schema.classAssignments.id, id));
+}
+
+/** Profile ids that completed an assignment: played that game at the assigned level or higher after it was set. */
+export async function assignmentCompletions(assignment: { game: string; level: number; createdAt: Date | null }, profileIds: string[]) {
+  const db = await getDb();
+  if (!db || profileIds.length === 0) return new Set<string>();
+  const rows = await db
+    .selectDistinct({ profileId: schema.gamePlays.profileId })
+    .from(schema.gamePlays)
+    .where(and(inArray(schema.gamePlays.profileId, profileIds), eq(schema.gamePlays.game, assignment.game), gte(schema.gamePlays.level, assignment.level), gte(schema.gamePlays.createdAt, assignment.createdAt ?? new Date(0))));
+  return new Set(rows.map(r => r.profileId));
+}
+
+/** Per-student numbers for a whole class in a handful of queries (not one per student). */
+export async function getStudentAggregates(profiles: Array<{ id: string; childName: string; ageGroup: string }>, assignments: Array<{ game: string; level: number; createdAt: Date | null }>): Promise<StudentAggregate[]> {
+  const db = await getDb();
+  if (!db || profiles.length === 0) return [];
+  const ids = profiles.map(p => p.id);
+  const [progress, plays, flaggedChat, moodRows] = await Promise.all([
+    db.select().from(schema.childProgress).where(inArray(schema.childProgress.profileId, ids)),
+    db
+      .select({
+        profileId: schema.gamePlays.profileId,
+        game: schema.gamePlays.game,
+        plays: sql<string>`COUNT(*)`,
+        correct: sql<string>`SUM(${schema.gamePlays.correct})`,
+        total: sql<string>`SUM(${schema.gamePlays.total})`,
+        last: sql<Date | string | null>`MAX(${schema.gamePlays.createdAt})`,
+      })
+      .from(schema.gamePlays)
+      .where(inArray(schema.gamePlays.profileId, ids))
+      .groupBy(schema.gamePlays.profileId, schema.gamePlays.game),
+    db
+      .select({ profileId: schema.chatSessions.profileId, n: sql<string>`COUNT(*)` })
+      .from(schema.chatMessages)
+      .innerJoin(schema.chatSessions, eq(schema.chatSessions.id, schema.chatMessages.sessionId))
+      .where(and(inArray(schema.chatSessions.profileId, ids), ne(schema.chatMessages.flagged, "safe")))
+      .groupBy(schema.chatSessions.profileId),
+    db.select().from(schema.moodCheckins).where(inArray(schema.moodCheckins.profileId, ids)).orderBy(desc(schema.moodCheckins.createdAt)),
+  ]);
+
+  const doneSets = await Promise.all(assignments.map(a => assignmentCompletions(a, ids)));
+
+  return profiles.map(p => {
+    const pr = progress.find(r => r.profileId === p.id);
+    const rows = plays.filter(r => r.profileId === p.id);
+    const agg: StudentAggregate["plays"] = {};
+    let last: Date | null = null;
+    for (const r of rows) {
+      agg[r.game as GameId] = { plays: Number(r.plays), correct: Number(r.correct), total: Number(r.total) };
+      const when = r.last ? new Date(r.last as string) : null;
+      if (when && (!last || when > last)) last = when;
+    }
+    const moods = moodRows.filter(m => m.profileId === p.id);
+    return {
+      profileId: p.id,
+      childName: p.childName,
+      ageGroup: p.ageGroup,
+      xp: pr?.xp ?? 0,
+      streakDays: pr?.streakDays ?? 0,
+      lastPlayDate: pr?.lastPlayDate ?? null,
+      plays: agg,
+      lastPlayedAt: last,
+      flaggedMessages: Number(flaggedChat.find(r => r.profileId === p.id)?.n ?? 0),
+      flaggedMoods: moods.filter(m => m.flagged && m.flagged !== "safe").length,
+      lastMood: moods[0]?.mood ?? null,
+      assignmentsDone: doneSets.filter(set => set.has(p.id)).length,
+    };
+  });
+}
+
+export async function countUserProfiles(userId: string) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [r] = await db.select({ n: sql<string>`COUNT(*)` }).from(schema.userProfiles).where(eq(schema.userProfiles.userId, userId));
+  return Number(r?.n ?? 0);
+}
+
+export async function setUserLanguage(userId: string, language: "ar" | "en") {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ language }).where(eq(users.id, userId));
+}
