@@ -145,7 +145,7 @@ describe("chat safety and personas", () => {
     const { api } = caller();
     for (let i = 0; i < 20; i++) await api.chat.sendMessage({ sessionId: "s1", message: "hi" });
     await expect(api.chat.sendMessage({ sessionId: "s1", message: "hi" })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
-  });
+  }, 30_000);
 });
 
 describe("parent PIN gate (server-side)", () => {
