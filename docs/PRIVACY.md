@@ -32,7 +32,13 @@ Status of this document: describes what the **software does today**. It is not l
 - **Not a compliance certification** of any kind (COPPA, FERPA, GDPR, SOC 2). The same applies to the consent wording.
 - **No data-processing agreements** with the AI provider, hosting provider or Cloudflare are included. They are needed.
 
+## Schools (Jordan)
+
+School accounts use separate consent wording (English and Arabic, version `2026-10-school-draft-1`). The school, not Rated AI, is responsible for any parental consent the law or school policy requires; Rated AI does not collect or verify it. Students have no emails or passwords, only a first name or nickname and a class. Jordan's Personal Data Protection Law No. 24 of 2023 may apply (parental consent for children's data, limits on transfers abroad); the age threshold and transfer rules have not been confirmed from the official text. See `docs/JORDAN_SCHOOLS.md`.
+
 ## Still to do
+
+- Jordanian legal review of the Arabic and English consent wording and of data location/transfer to the AI provider.
 
 - Legal review of the consent wording; a public privacy policy and terms page; a named privacy contact (`PRIVACY_CONTACT_EMAIL`).
 - Retention policy and automatic expiry (nothing is deleted automatically today), plus backup/log deletion procedures.

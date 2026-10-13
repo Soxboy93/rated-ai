@@ -50,7 +50,11 @@ Large text, easy-read letters (Lexend font with extra spacing), high contrast, c
 - A scripted browser run (Playwright, 34 checks) registered a parent, added two children and used every screen: all five games, chat, story, doodle (real ink + PNG), mood (including a flagged note), pet, homework, trophies, accessibility settings persisting across reload, the parent area, data export, deleting a child with cascade checks, and phone-width layouts with no sideways scrolling. It found and fixed two real bugs (confetti freezing on screen after a popup was closed, and a collapsed XP bar on phones).
 - The AI in those runs was a local stand-in, so AI-written content (stories, homework steps, chat replies, reports) was not evaluated for quality or safety against a real model.
 
+## Arabic and schools
+The app runs in Arabic (right-to-left) or English; the choice is saved on the account. School accounts add classes, a teacher view and class activities. Details, checks and the list of things that must happen before any school uses it: `docs/JORDAN_SCHOOLS.md`. All Arabic text is an unreviewed draft.
+
 ## Not done / limits
+- Arabic text, spelling/quiz banks and safety word lists have had no native-speaker educator review. Arabic read-aloud needs an Arabic voice installed on the device; otherwise Spelling Bee shows a written clue.
 - No educator review of content; the quiz bank is small. No claim of curriculum alignment.
 - No offline mode, installable app, or native mobile app. No leaderboards or friend features by design (child privacy).
 - Pet is per account. Homework history, report cards and weekly summaries are still per account, not per child.
@@ -58,4 +62,4 @@ Large text, easy-read letters (Lexend font with extra spacing), high contrast, c
 - Voice input and read-aloud depend on the browser and the voices installed on the device.
 
 ## The Claude preview
-`node scripts/build-demo.mjs <out.html>` builds the **real client** into one self-contained HTML file wired to an in-browser demo backend (`client/src/demo/mockServer.ts`, `vite.demo.config.ts`). It reuses the real game, XP, streak, badge and safety-screening code. What is not real in the preview: accounts and the database (everything lives in memory and resets on reload), the AI (chat, story and homework replies are canned), picture generation, and file downloads. The preview opens with one example child so the parent area and trophy room are not empty.
+`node scripts/build-demo.mjs <out.html>` builds the **real client** into one self-contained HTML file wired to an in-browser demo backend (`client/src/demo/mockServer.ts`, `vite.demo.config.ts`). It reuses the real game, XP, streak, badge and safety-screening code. What is not real in the preview: accounts and the database (everything lives in memory and resets on reload), the AI (chat, story and homework replies are canned), picture generation, and file downloads. The preview opens with one example child (family accounts) or one example class of eight made-up students (school accounts) so the parent/teacher area and trophy room are not empty. It follows the browser language, with an Arabic/English switch.

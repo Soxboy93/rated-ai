@@ -134,3 +134,9 @@ The whole client was rebuilt around a kid-friendly "sticker book" design (see `d
 Removed because they did nothing real: peer challenges, college prep, the teacher dashboard and the old achievements page, plus their server routes. They were listed as stubs in section 3. The unused hero banner moved to `design-assets/`; character art was cut out to transparent and shrunk from ~1.8 MB to ~50 KB each.
 
 Verification: 77 unit/API tests; real SQL run against MariaDB; a 34-check scripted browser run. See `docs/KIDS_APP.md` ("How it was checked", "Not done / limits"). Not done: educator review of content, a specialist accessibility audit, real-model evaluation of AI output, per-child scoping of homework/report/summary/pet data.
+
+## 12. Jordan schools: Arabic and school accounts (fourth pass)
+
+Added: Arabic/RTL for the whole client with a coverage-tested dictionary; Arabic game content and safety rules; school account type with its own consent wording, classes, roster import, teacher class-progress view with CSV export, and class activities shown on students' home screens. Migration `0013`. 137 unit/API tests; scripted Arabic browser runs; a school flow run against real MariaDB with database assertions (see `docs/JORDAN_SCHOOLS.md`).
+
+Not done and must not be claimed: no native-speaker educator review of any Arabic text, no legal review, no real-model evaluation in Arabic, no Ministry approval pathway known, nothing deployed. Legacy `teachers`/`classrooms`/`school_integrations` tables from the original code still exist in the schema and are unused.
