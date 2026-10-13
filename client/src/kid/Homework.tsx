@@ -34,6 +34,7 @@ export default function Homework() {
   const [data, setData] = useState<string | null>(null);
   const [solution, setSolution] = useState<Solution | null>(null);
   const [shown, setShown] = useState(0);
+  const [mine, setMine] = useState("");
   const [error, setError] = useState("");
 
   const onFile = async (file?: File) => {
@@ -50,10 +51,12 @@ export default function Homework() {
     setError(""); playSound("tap");
     try {
       const out = (await analyze.mutateAsync({ imageData: data, subject, language: currentLang() })) as Solution;
-      setSolution(out); setShown(0); playSound("correct");
+      setSolution(out); setShown(0); setMine(""); playSound("correct");
     } catch (e) { setError(e instanceof Error ? t(e.message) : t("Something went wrong. Try again!")); }
   };
 
+  // Compare the child's own try with the answer: digits and letters only, Arabic-Indic digits treated as ordinary digits.
+  const norm = (v: string) => v.replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x660)).toLowerCase().replace(/[^a-z0-9\u0621-\u064A./-]/g, "");
   const total = solution?.steps.length ?? 0;
   const allShown = solution ? shown >= total : false;
 
@@ -97,6 +100,12 @@ export default function Homework() {
                 </li>
               ))}
             </ol>
+            {total > 0 && shown === 0 && (
+              <div className="k-note-good k-card" style={{ display: "grid", gap: 8 }}>
+                <b>🤔 {t("Have a go first! What do you think the answer is?")}</b>
+                <input className="k-input" value={mine} maxLength={60} onChange={e => setMine(e.target.value)} placeholder={t("My answer (you can skip this)")} aria-label={t("My answer (you can skip this)")} />
+              </div>
+            )}
             {total > 0 && !allShown && (
               <button className="k-btn" style={{ ["--c" as string]: "var(--c-homework)", width: "fit-content" }} onClick={() => { setShown(shown + 1); playSound("flip"); }}>
                 {shown === 0 ? t("Show me step 1") : `${t("Next step")} ${currentLang() === "ar" ? "⬅" : "➜"}`}
@@ -106,9 +115,12 @@ export default function Homework() {
               <div className="k-card k-in" style={{ background: "#dcf5e8", color: "#0d4a30", borderColor: "#9fdcbd", display: "grid", gap: 6 }}>
                 <h3 style={{ fontSize: "1.3rem" }}>✅ {t("Answer:")} {solution.answer}</h3>
                 <p>{solution.explanation}</p>
+                {mine.trim() && (norm(mine) === norm(solution.answer)
+                  ? <p><b>🎉 {t("You worked it out yourself before I showed you. Brilliant!")}</b></p>
+                  : <p>💡 {t("You guessed: {guess}. Compare it with the steps above. Where did yours differ?", { guess: mine.trim() })}</p>)}
               </div>
             )}
-            <div><button className="k-btn small light" onClick={() => { setSolution(null); setPreview(null); setData(null); setShown(0); stopSpeaking(); }}>🔁 {t("Another problem")}</button></div>
+            <div><button className="k-btn small light" onClick={() => { setSolution(null); setPreview(null); setData(null); setShown(0); setMine(""); stopSpeaking(); }}>🔁 {t("Another problem")}</button></div>
           </section>
         )}
       </div>

@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "ai:check": "tsx scripts/ai-check.ts",
-    "ai:eval": "tsx scripts/ai-eval.ts"
+    "ai:eval": "tsx scripts/ai-eval.ts",
+    "admin:make": "tsx scripts/make-admin.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

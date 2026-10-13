@@ -79,3 +79,9 @@ export function normalizeSearch(raw: unknown): SearchResult {
 }
 
 export const searchText = (r: SearchResult) => [r.title, r.answer, ...r.facts, r.didYouKnow, ...r.related, r.askGrownUp].filter(Boolean).join("\n");
+
+/** "Teach it back": the child explains the lesson in their own words and the guide responds like a curious, kind friend. */
+export const teachBackRule =
+  "The child is now explaining the lesson back to you in their own words, to check that they understand it. " +
+  "Start with something specific they got right. Then, only if needed, add or gently correct at most ONE thing, using the lesson reference. " +
+  "End with one short question that makes them think a little further. Never say they are wrong in a harsh way, and never score them. Keep it to a few short sentences.";

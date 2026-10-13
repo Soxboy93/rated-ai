@@ -15,9 +15,10 @@ import {
 } from "@shared/gamification";
 import { screenText, safeFallbackReply } from "../../../server/safety";
 import { MAX_SOURCE_CHARS } from "@shared/lesson";
-import { gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
-import { UNAUTHED_ERR_MSG } from "@shared/const";
+import { buildBoost, gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
+import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "@shared/const";
 import { sortInbox, urgencyOf, type InboxItem } from "@shared/safetyInbox";
+import { makeAdminHandlers } from "./adminDemo";
 import { buildSchoolOverview } from "@shared/schoolReport";
 import { analyzeResults, insightFacts, MIN_RESULTS_FOR_INSIGHT } from "@shared/insights";
 import { aiInsights, aiLetter, aiAssistant, aiChat, aiExtractText, aiHomework, aiLessonDraft, aiLessonRevise, aiSearch, aiStory, AiRefused } from "./ai";
@@ -43,7 +44,7 @@ type Session = { id: string; userId: string; profileId: string; childName: strin
 
 function fresh() {
   return {
-    user: null as null | { id: string; email: string; name: string | null; role: "user"; loginMethod: string; accountType: AccountType; language: Lang | null; createdAt: Date; lastSignedIn: Date },
+    user: null as null | { id: string; email: string; name: string | null; role: "user" | "admin"; loginMethod: string; accountType: AccountType; language: Lang | null; createdAt: Date; lastSignedIn: Date },
     consent: null as null | { version: string; grantedAt: Date },
     classes: [] as Cls[],
     lessons: [] as Lesson[],
@@ -69,6 +70,7 @@ function fresh() {
 let S = fresh();
 
 const log = (action: string, detail?: string) => S.audit.unshift({ id: uid(), action, detail: detail ?? null, createdAt: new Date() });
+export const ADMIN_DEMO_EMAIL = "admin@rated-ai.example";
 const requireUser = () => { if (!S.user) throw new DemoError("UNAUTHORIZED", UNAUTHED_ERR_MSG); return S.user; };
 const accountType = (): AccountType => S.user?.accountType ?? "family";
 const requiredVersion = () => consentVersionFor(accountType());
@@ -217,6 +219,12 @@ function cannedLesson(topic: string, lang: Lang, source: string | null): LessonC
       { q: "1/3 + 1/3 = ؟", options: ["2/3", "2/6", "1/3", "1/6"], answer: 0, explanation: "ثلثان!" },
       { q: "أيّ جملة صحيحة؟", options: ["نجمع المقامين", "نجمع البسطين ونُبقي المقام", "نضرب البسطين", "نطرح المقام"], answer: 1, explanation: "المقام يخبرنا بحجم القطع فلا يتغيّر." },
     ],
+    vocabulary: [
+      { term: "البسط", meaning: "العدد الذي في أعلى الكسر، ويخبرنا كم جزءاً أخذنا." },
+      { term: "المقام", meaning: "العدد الذي في أسفل الكسر، ويخبرنا كم جزءاً تساوياً قُسّم الكل." },
+      { term: "كسر", meaning: "جزء من الكل." },
+      { term: "نصف", meaning: "جزء من اثنين متساويين." },
+    ],
     differentiation: { support: "استخدم الرسم والأشكال لتمثيل الأجزاء.", extension: "اطلب من الطلاب اختراع مسألة كلامية." },
     misconceptions: ["جمع المقامين مع بعضهما"],
     homework: "حلّ ثلاث مسائل من الكتاب.",
@@ -242,6 +250,12 @@ function cannedLesson(topic: string, lang: Lang, source: string | null): LessonC
       { q: "1/3 + 1/3 = ?", options: ["2/3", "2/6", "1/3", "1/6"], answer: 0, explanation: "Two thirds!" },
       { q: "Which sentence is true?", options: ["Add the bottoms", "Add the tops, keep the bottom", "Multiply the tops", "Subtract the bottom"], answer: 1, explanation: "The bottom tells the size of the pieces, so it stays." },
     ],
+    vocabulary: [
+      { term: "numerator", meaning: "The top number. It tells how many parts we have." },
+      { term: "denominator", meaning: "The bottom number. It tells how many equal parts make the whole." },
+      { term: "fraction", meaning: "A part of a whole." },
+      { term: "half", meaning: "One of two equal parts." },
+    ],
     differentiation: { support: "Use drawings and shapes to show the parts.", extension: "Ask students to invent a word problem." },
     misconceptions: ["Adding the two denominators together"],
     homework: "Solve three problems from the textbook.",
@@ -264,6 +278,7 @@ const H: Record<string, Handler> = {
     return S.user;
   },
   "auth.login": ({ email }) => {
+    if (email === ADMIN_DEMO_EMAIL) { S.user = { id: "demo-admin", email, name: "Administrator", role: "admin", loginMethod: "email", accountType: "school", language: S.user?.language ?? null, createdAt: new Date(), lastSignedIn: new Date() }; return S.user; }
     S.user = { id: "demo-parent", email, name: null, role: "user", loginMethod: "email", accountType: S.user?.accountType ?? "family", language: S.user?.language ?? null, createdAt: new Date(), lastSignedIn: new Date() };
     return S.user;
   },
@@ -519,6 +534,11 @@ const H: Record<string, Handler> = {
       ? `اقتراح تجريبي: ابدأ بمثال من حياة الطلاب اليومية، ثم اطلب منهم تفسيره بكلماتهم. (ردّ تجريبي: في التطبيق الحقيقي يجيب المساعد عن سؤالك «${last.slice(0, 60)}» بالذكاء الاصطناعي.)`
       : `Preview suggestion: start with an example from the students' everyday life, then ask them to explain it in their own words. (Preview reply: in the live app the companion answers "${last.slice(0, 60)}" with the AI model.)` };
   },
+  "studentLessons.boost": ({ profileId }) => {
+    requireConsent(); const p = profile(profileId); if (!p.classId) return { questions: [] };
+    const lessons = S.shares.filter(x => x.classId === p.classId && !x.archived).map(x => { const l = lessonOf(x.lessonId); return { title: l.title, content: l.content }; });
+    return { questions: buildBoost(lessons, 6) };
+  },
   "studentLessons.get": ({ profileId, shareId }) => {
     requireConsent(); const p = profile(profileId); const sh = shareOf(shareId);
     if (sh.archived || sh.classId !== p.classId) throw new DemoError("NOT_FOUND", "Lesson not found");
@@ -755,6 +775,20 @@ async function ai<T>(fn: () => Promise<T | null>): Promise<T | null> {
   try { return await fn(); }
   catch (e) { if (e instanceof AiRefused) throw new DemoError("BAD_REQUEST", e.message); return null; }
 }
+
+// Administrator console data (made-up accounts). Needs an administrator signed in AND the PIN unlocked, like the real server.
+const adminHandlers = makeAdminHandlers({ DemoError, uid, adminEmail: () => S.user?.email ?? "admin" });
+for (const [name, fn] of Object.entries(adminHandlers)) {
+  H[name] = (input: unknown) => {
+    requireUser();
+    if (S.user!.role !== "admin") throw new DemoError("FORBIDDEN", NOT_ADMIN_ERR_MSG);
+    if (!S.unlocked) throw new DemoError("FORBIDDEN", "Parent mode is locked (10003)");
+    return (fn as (i: unknown) => unknown)(input);
+  };
+}
+// An administrator's PIN has to be at least 8 characters, as on the server.
+const setPinBase = H["parent.setPin"];
+H["parent.setPin"] = (input: any) => { if (S.user?.role === "admin" && String(input.pin).length < 8) throw new DemoError("BAD_REQUEST", "An administrator PIN needs at least 8 characters."); return setPinBase(input); };
 
 /* ---------------------------------------------------------------- fetch */
 export const resetDemo = () => { S = fresh(); seed(); };

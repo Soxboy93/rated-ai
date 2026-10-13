@@ -16,6 +16,8 @@ import { ChildProvider, useChild } from "./kid/ChildContext";
 import PlayerPicker from "./kid/PlayerPicker";
 import Home from "./kid/Home";
 import Search from "./kid/Search";
+import Boost from "./kid/Boost";
+import AdminConsole from "./admin/AdminConsole";
 import Chat from "./kid/Chat";
 import Story from "./kid/Story";
 import Doodle from "./kid/Doodle";
@@ -66,6 +68,7 @@ function KidRoutes() {
       <Route path="/games/patterns" component={PatternGame} />
       <Route path="/chat" component={Chat} />
       <Route path="/search" component={Search} />
+      <Route path="/boost" component={Boost} />
       <Route path="/story" component={Story} />
       <Route path="/doodle" component={Doodle} />
       <Route path="/mood" component={Mood} />
@@ -99,6 +102,8 @@ function Router() {
   }
   // Every feature stores a child's data, so the whole app requires a parent account.
   if (!user) return <AuthPage />;
+  // Administrators land in the admin console. It handles no child's data of its own, so it needs no parental consent.
+  if (user.role === "admin") return location === "/parent" ? <AccessibilityProvider><ChildProvider><ParentArea /></ChildProvider></AccessibilityProvider> : <AdminConsole />;
   // Nothing that handles a child's data is reachable until a parent has agreed. The parent area stays
   // reachable so a parent can still export or delete data after withdrawing consent.
   if (!consent.data?.granted && location !== "/parent") return <ConsentPage contactEmail={consent.data?.contactEmail ?? null} accountType={consent.data?.accountType ?? "family"} version={consent.data?.version ?? ""} />;

@@ -163,7 +163,7 @@ function DeleteAccount({ school }: { school: boolean }) {
   );
 }
 
-const AUDIT_LABELS: Record<string, string> = {
+export const AUDIT_LABELS: Record<string, string> = {
   assignment_created: T("Activity assigned"),
   class_created: T("Class created"),
   class_deleted: T("Class deleted"),
@@ -178,6 +178,16 @@ const AUDIT_LABELS: Record<string, string> = {
   profile_exported: T("Profile data downloaded"),
   profile_updated: T("Profile updated"),
   roster_imported: T("Student list imported"),
+  class_controls: T("Class controls changed"),
+  safety_reviewed: T("Safety message reviewed"),
+  safety_reopened: T("Safety message reopened"),
+  support_viewed_account: T("Support staff viewed this account"),
+  support_viewed_student: T("Support staff viewed a student's progress"),
+  support_read_chats: T("Support staff read a student's conversations"),
+  support_suspended: T("Account suspended by support"),
+  support_unsuspended: T("Account reactivated by support"),
+  support_set_password: T("Support set a temporary password"),
+  support_reset_pin: T("Support cleared the PIN"),
 };
 
 /** Consent, privacy activity and account deletion. Shared by family and school accounts. */

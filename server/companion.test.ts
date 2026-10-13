@@ -267,3 +267,32 @@ describe("student progress report", () => {
     await expect((await caller()).classes.studentReport({ profileId: "kid1" })).rejects.toThrow();
   });
 });
+
+describe("teach it back", () => {
+  it("adds the teach-back instructions only when asked, and only with a lesson", async () => {
+    llm.invokeLLM.mockResolvedValue(llmText("Great start!"));
+    const api = await caller();
+    await api.chat.sendMessage({ sessionId: "sess", message: "the top is how many we have", shareId: "s1", mode: "teachback" });
+    expect(JSON.stringify(llm.invokeLLM.mock.calls[0][0])).toContain("explaining the lesson back to you");
+    await api.chat.sendMessage({ sessionId: "sess", message: "explain again", shareId: "s1" });
+    expect(JSON.stringify(llm.invokeLLM.mock.calls[1][0])).not.toContain("explaining the lesson back to you");
+    await api.chat.sendMessage({ sessionId: "sess", message: "hi", mode: "teachback" });
+    expect(JSON.stringify(llm.invokeLLM.mock.calls[2][0])).not.toContain("explaining the lesson back to you");
+  });
+});
+
+describe("daily boost", () => {
+  it("gives a student a mixed review from the lessons shared with their class, answers included", async () => {
+    store.listStudentLessons.mockResolvedValue([{ title: "Fractions", content: JSON.stringify(content) }]);
+    const out = await (await caller()).studentLessons.boost({ profileId: "kid1" });
+    expect(out.questions).toHaveLength(1); // the sample lesson has one practice question
+    expect(out.questions[0]).toMatchObject({ lessonTitle: "Fractions", answer: 1 });
+    expect(JSON.stringify(out)).not.toContain("SECRET-QUIZ-QUESTION"); // the graded quiz is never used
+  });
+  it("is empty for a student without a class, and refused for someone else's student", async () => {
+    store.getProfile.mockResolvedValue({ ...kid, classId: null });
+    expect((await (await caller()).studentLessons.boost({ profileId: "kid1" })).questions).toEqual([]);
+    store.getProfile.mockResolvedValue({ ...kid, userId: "someone-else" });
+    await expect((await caller()).studentLessons.boost({ profileId: "kid1" })).rejects.toThrow();
+  });
+});

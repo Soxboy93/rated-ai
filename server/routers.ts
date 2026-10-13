@@ -50,11 +50,12 @@ import {
   protectedProcedure,
   publicProcedure,
   router,
+  adminProcedure,
 } from "./_core/trpc";
-import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt, languageRule, lessonHelpRule, normalizeSearch, searchJsonSchema, searchSystemPrompt, searchText } from "./prompts";
+import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt, languageRule, lessonHelpRule, teachBackRule, normalizeSearch, searchJsonSchema, searchSystemPrompt, searchText } from "./prompts";
 import { analyzeResults, insightFacts, MIN_RESULTS_FOR_INSIGHT } from "@shared/insights";
 import { assistantSystemPrompt, insightsJsonSchema, insightsSystemPrompt, letterSystemPrompt, normalizeInsights, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "./lessonPrompts";
-import { lessonJsonSchema, LESSON_SUBJECTS, MAX_SOURCE_CHARS, MIN_SOURCE_CHARS, SOURCE_REQUIRED_SUBJECTS, gradeQuiz, normalizeLesson, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
+import { buildBoost, lessonJsonSchema, LESSON_SUBJECTS, MAX_SOURCE_CHARS, MIN_SOURCE_CHARS, SOURCE_REQUIRED_SUBJECTS, gradeQuiz, normalizeLesson, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
 import { safeFallbackReply, screenText, screenWithProvider } from "./safety";
 import { buildSchoolOverview } from "@shared/schoolReport";
 import { sortInbox, urgencyOf, type InboxItem } from "@shared/safetyInbox";
@@ -148,6 +149,21 @@ async function loadStudentReport(profile: { id: string; childName: string; class
     lessons: lessons.map(l => ({ title: l.title, subject: l.subject, correct: l.result?.correct ?? null, total: l.result?.total ?? null })),
     activities: { done, total: assignments.length }, badges: badges.length,
   };
+}
+
+/** Looks an account up for a management action. Administrators (including yourself) cannot be managed this way. */
+async function manageableAccount(adminId: string, userId: string) {
+  const target = await db.getUser(userId);
+  if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+  if (target.id === adminId || target.role === "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Administrator accounts cannot be changed from the console." });
+  return target;
+}
+
+/** Records an administrator's access twice: on the administrator (what they did) and on the account (so its owner can see support looked). */
+async function adminAudit(admin: { id: string; email: string | null }, target: { id: string; email: string | null }, action: string, detail?: string) {
+  const extra = detail ? `: ${detail}` : "";
+  await db.logAudit(admin.id, `admin_${action}`, `${target.email ?? target.id}${extra}`.slice(0, 250));
+  if (target.id !== admin.id) await db.logAudit(target.id, `support_${action}`, `by ${admin.email ?? "an administrator"}${extra}`.slice(0, 250));
 }
 
 export type ClassControls = { chat: boolean; search: boolean; focus: boolean };
@@ -332,7 +348,6 @@ export const appRouter = router({
             loginMethod: "email",
             accountType: input.accountType,
             language: input.language,
-            role: ENV.adminEmails.includes(input.email) ? "admin" : "user",
             lastSignedIn: new Date(),
           });
         } catch {
@@ -355,6 +370,7 @@ export const appRouter = router({
         if (!user || !user.passwordHash || !valid) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect email or password" });
         }
+        if (user.suspendedAt && user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "This account is suspended. Please contact support." });
         await db.touchUserSignIn(user.id);
         ctx.res.cookie(COOKIE_NAME, await signSession(user.id), {
           ...getSessionCookieOptions(ctx.req),
@@ -408,6 +424,8 @@ export const appRouter = router({
           message: z.string().trim().min(1).max(MAX_CHAT_MESSAGE_CHARS),
           // Set when the child asks for help while working on a lesson their teacher shared.
           shareId: z.string().max(64).optional(),
+          // "teachback": the child is explaining the lesson in their own words (needs shareId).
+          mode: z.enum(["teachback"]).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -451,7 +469,7 @@ export const appRouter = router({
         const response = await llm({
           task: "chat",
           messages: [
-            { role: "system", content: buildSystemPrompt({ ...session, language: lang }) + (lessonContext ? `\n\n${lessonHelpRule(lessonContext)}` : "") },
+            { role: "system", content: buildSystemPrompt({ ...session, language: lang }) + (lessonContext ? `\n\n${lessonHelpRule(lessonContext)}${input.mode === "teachback" ? `\n\n${teachBackRule}` : ""}` : "") },
             ...history.map(m => ({ role: m.role, content: m.content })),
           ],
         });
@@ -1307,6 +1325,102 @@ export const appRouter = router({
     }),
   }),
 
+  // The administrator console. Read-mostly access to every account and student, and every look is written to the audit
+  // log of both the administrator and the account owner. There is deliberately no "sign in as" and no way to read a password.
+  admin: router({
+    overview: adminProcedure.query(() => db.adminOverview()),
+
+    accounts: adminProcedure
+      .input(z.object({ search: z.string().trim().max(100).optional(), type: z.enum(["family", "school"]).optional(), status: z.enum(["active", "suspended", "admin"]).optional(), page: z.number().int().min(0).max(10_000).default(0) }))
+      .query(async ({ input }) => {
+        const PAGE = 25;
+        const { rows, total } = await db.adminListAccounts({ search: input.search || undefined, type: input.type, status: input.status, limit: PAGE, offset: input.page * PAGE });
+        return { rows, total, pageSize: PAGE };
+      }),
+
+    account: adminProcedure.input(z.object({ userId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      const target = await db.getUser(input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+      await adminAudit(ctx.user, target, "viewed_account");
+      const [classes, profiles, lessons, audit, consent] = await Promise.all([db.listClasses(target.id), db.listProfiles(target.id), db.listLessons(target.id), db.listAuditEvents(target.id, 40), db.getActiveConsent(target.id)]);
+      const aggregates = await db.getStudentAggregates(profiles, []);
+      return {
+        user: toSessionUser(target),
+        consent: consent ? { version: consent.version, language: consent.language, grantedAt: consent.grantedAt } : null,
+        classes: classes.map(c => ({ id: c.id, name: c.name, grade: c.grade, chat: c.chatEnabled !== false, search: c.searchEnabled !== false, focus: c.focusMode === true })),
+        students: profiles.map(p => {
+          const a = aggregates.find(x => x.profileId === p.id);
+          return { id: p.id, childName: p.childName, ageGroup: p.ageGroup, classId: p.classId, xp: a?.xp ?? 0, lastPlayedAt: a?.lastPlayedAt ?? null, flaggedMessages: a?.flaggedMessages ?? 0 };
+        }),
+        lessons: lessons.map(l => ({ id: l.id, title: l.title, subject: l.subject, grade: l.grade, updatedAt: l.updatedAt })),
+        audit,
+      };
+    }),
+
+    students: adminProcedure.input(z.object({ search: z.string().trim().max(100).default("") })).query(async ({ ctx, input }) => {
+      await db.logAudit(ctx.user.id, "admin_searched_students", input.search.slice(0, 60) || "(all)");
+      return db.adminSearchStudents(input.search, 60);
+    }),
+
+    student: adminProcedure.input(z.object({ profileId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      const profile = await db.getProfile(input.profileId);
+      const owner = profile ? await db.getUser(profile.userId) : undefined;
+      if (!profile || !owner) throw new TRPCError({ code: "NOT_FOUND", message: "Child profile not found" });
+      await adminAudit(ctx.user, owner, "viewed_student", profile.childName);
+      const cls = profile.classId ? await db.getClass(profile.classId) : undefined;
+      return { profile: { id: profile.id, childName: profile.childName, ageGroup: profile.ageGroup, classId: profile.classId, className: cls?.name ?? null }, owner: { id: owner.id, email: owner.email, accountType: owner.accountType }, progress: await progressSnapshot(profile.id) };
+    }),
+
+    // Reading a child's conversations is a separate, deliberate call so it is logged on its own.
+    studentChats: adminProcedure.input(z.object({ profileId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      const profile = await db.getProfile(input.profileId);
+      const owner = profile ? await db.getUser(profile.userId) : undefined;
+      if (!profile || !owner) throw new TRPCError({ code: "NOT_FOUND", message: "Child profile not found" });
+      await adminAudit(ctx.user, owner, "read_chats", profile.childName);
+      return db.getProfileChats(owner.id, profile.id);
+    }),
+
+    suspend: adminProcedure
+      .input(z.object({ userId: z.string().max(64), suspended: z.boolean(), reason: z.string().trim().max(200).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const target = await manageableAccount(ctx.user.id, input.userId);
+        await db.setUserSuspended(target.id, input.suspended, input.suspended ? input.reason || "Suspended by an administrator" : null);
+        await adminAudit(ctx.user, target, input.suspended ? "suspended" : "unsuspended", input.reason);
+        return { success: true };
+      }),
+
+    // There is no password-reset email yet, so support can set a temporary password and tell the owner out of band.
+    setPassword: adminProcedure
+      .input(z.object({ userId: z.string().max(64), password: z.string().min(8).max(128) }))
+      .mutation(async ({ ctx, input }) => {
+        checkRateLimit(`admin-password:${ctx.user.id}`, 20, 60 * 60 * 1000);
+        const target = await manageableAccount(ctx.user.id, input.userId);
+        await db.setUserPasswordHash(target.id, await hashPassword(input.password));
+        await adminAudit(ctx.user, target, "set_password");
+        return { success: true };
+      }),
+
+    resetPin: adminProcedure.input(z.object({ userId: z.string().max(64) })).mutation(async ({ ctx, input }) => {
+      const target = await manageableAccount(ctx.user.id, input.userId);
+      await db.clearParentalPin(target.id);
+      await adminAudit(ctx.user, target, "reset_pin");
+      return { success: true };
+    }),
+
+    deleteAccount: adminProcedure
+      .input(z.object({ userId: z.string().max(64), confirmEmail: z.string().max(320) }))
+      .mutation(async ({ ctx, input }) => {
+        const target = await manageableAccount(ctx.user.id, input.userId);
+        if (!target.email || input.confirmEmail.trim().toLowerCase() !== target.email.toLowerCase()) throw new TRPCError({ code: "BAD_REQUEST", message: "Type the account's email exactly to confirm." });
+        // Logged under the administrator only: the account's own audit trail is deleted with it.
+        await db.logAudit(ctx.user.id, "admin_deleted_account", `${target.email} (${target.accountType})`);
+        await db.deleteAllUserData(target.id);
+        return { success: true };
+      }),
+
+    actions: adminProcedure.query(() => db.adminListActions(100)),
+  }),
+
   // The safety inbox: every flagged message in the account's chats and searches, ranked, with the student's name and class.
   safety: router({
     inbox: parentProcedure.query(async ({ ctx }) => {
@@ -1677,6 +1791,14 @@ export const appRouter = router({
 
   // The student's side of a shared lesson. Grading happens here, so a student cannot score themselves.
   studentLessons: router({
+    // A short mixed review from the lessons shared with this student's class. Unmarked, answers included (like the practice game).
+    boost: consentedProcedure.input(z.object({ profileId: z.string().max(64) })).query(async ({ ctx, input }) => {
+      const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
+      if (!profile.classId) return { questions: [] as ReturnType<typeof buildBoost> };
+      const lessons = await db.listStudentLessons(profile.classId, profile.id);
+      return { questions: buildBoost(lessons.map(l => ({ title: l.title, content: parseContent(l.content) })), 6) };
+    }),
+
     get: consentedProcedure.input(z.object({ profileId: z.string().max(64), shareId: z.string().max(64) })).query(async ({ ctx, input }) => {
       const profile = await requireOwnedProfile(input.profileId, ctx.user.id);
       const sh = await db.getLessonShare(input.shareId);
@@ -1755,6 +1877,8 @@ export const appRouter = router({
       .input(z.object({ pin: pinSchema, currentPin: pinSchema.optional() }))
       .mutation(async ({ ctx, input }) => {
         checkRateLimit(`pin:${ctx.user.id}`, 5, 5 * 60 * 1000);
+        // An administrator's PIN protects every family's data, so it has to be longer than a parent's.
+        if (ctx.user.role === "admin" && input.pin.length < 8) throw new TRPCError({ code: "BAD_REQUEST", message: "An administrator PIN needs at least 8 characters." });
         const existing = await db.getParentalSettings(ctx.user.id);
         const pinHash = await hashPassword(input.pin);
         if (!existing) {

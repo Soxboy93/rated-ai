@@ -97,6 +97,19 @@ function Editor({ draft, set }: { draft: LessonContent; set: (c: LessonContent) 
         <Button type="button" variant="outline" size="sm" disabled={draft.activities.length >= 5} onClick={() => patch({ activities: [...draft.activities, { title: "", mode: "pair", instructions: "", minutes: 10 }] })}>＋ {t("Add an activity")}</Button>
       </section>
 
+      <section className="space-y-3">
+        <h3 className="font-semibold">{t("Word cards")}</h3>
+        <p className="text-xs text-gray-500">{t("Key words with a short meaning. Students flip them as cards and play a matching game with them.")}</p>
+        {draft.vocabulary.map((v, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <Input className="max-w-[12rem]" aria-label={t("Word {n}", { n: i + 1 })} value={v.term} onChange={e => patch({ vocabulary: move(draft.vocabulary, i, { ...v, term: e.target.value }) })} />
+            <Input className="min-w-[12rem] flex-1" aria-label={t("Meaning {n}", { n: i + 1 })} value={v.meaning} onChange={e => patch({ vocabulary: move(draft.vocabulary, i, { ...v, meaning: e.target.value }) })} />
+            <Button type="button" variant="outline" size="sm" onClick={() => patch({ vocabulary: drop(draft.vocabulary, i) })}>{t("Remove")}</Button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" disabled={draft.vocabulary.length >= 12} onClick={() => patch({ vocabulary: [...draft.vocabulary, { term: "", meaning: "" }] })}>＋ {t("Add a word")}</Button>
+      </section>
+
       {(["quiz", "practice"] as const).map(kind => (
       <section key={kind} className="space-y-3">
         <h3 className="font-semibold">{kind === "quiz" ? t("Quiz") : t("Practice game")}</h3>
@@ -163,6 +176,12 @@ function Body({ c }: { c: LessonContent }) {
               </li>
             ))}
           </ol>
+        </Section>
+      )}
+      {c.practice.length > 0 && <Section title={t("Practice game")}><p>{t("{n} game questions with instant feedback (not marked). Edit them with Edit lesson.", { n: c.practice.length })}</p></Section>}
+      {c.vocabulary.length > 0 && (
+        <Section title={t("Word cards")}>
+          <ul className="grid gap-1 sm:grid-cols-2">{c.vocabulary.map((v, i) => <li key={i} className="rounded border px-2 py-1"><b><Bidi>{v.term}</Bidi></b>: <Bidi>{v.meaning}</Bidi></li>)}</ul>
         </Section>
       )}
       {(c.differentiation.support || c.differentiation.extension) && <Section title={t("Differentiation")}>{c.differentiation.support && <p><b>{t("Support:")}</b> {c.differentiation.support}</p>}{c.differentiation.extension && <p><b>{t("Extension:")}</b> {c.differentiation.extension}</p>}</Section>}

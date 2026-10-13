@@ -60,6 +60,13 @@ Each lesson now has three ways in: **Learn it with the guide** (short cards, one
 
 Teachers can upload a photo or PDF of a textbook page (or a text file) when creating a lesson. The AI copies the text, the teacher checks and edits it, and only then is the lesson drafted from it. Photos are shrunk in the browser; files over 5 MB are refused.
 
+### More ways to learn
+- **Word cards and a matching game.** A lesson can carry key words with a child-friendly meaning (the AI drafts them; the teacher edits them). Students flip the cards, mark what they know (unsure ones come round again), then match words to meanings.
+- **Daily Boost.** A six-question mixed review drawn from the lessons the class has been given (practice questions plus word-meaning questions), at most two from one lesson first. Unmarked, with instant feedback. It never uses the graded quiz.
+- **Teach it back.** In "Ask the guide about this lesson", the child can explain the lesson in their own words; the guide says what they got right, adds or gently corrects at most one thing, and asks one question back.
+- **Think first.** Homework Buddy asks the child for their own answer before showing any step, then compares it with the solution at the end.
+- The home screen is grouped: what's next, from your teacher, missions, Play and practise, Learn and ask, Make something, All about me.
+
 ## Arabic and schools
 The app runs in Arabic (right-to-left) or English; the choice is saved on the account. School accounts add classes, a teacher view and class activities. Details, checks and the list of things that must happen before any school uses it: `docs/JORDAN_SCHOOLS.md`. All Arabic text is an unreviewed draft.
 

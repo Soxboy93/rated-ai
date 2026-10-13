@@ -9,7 +9,7 @@ import { guideById } from "./guides";
 import { playSound } from "./sound";
 import { t, currentLang } from "@/i18n";
 import Bidi from "@/components/Bidi";
-import { LearnCards, PracticeGame } from "./LessonGame";
+import { LearnCards, MatchGame, PracticeGame, WordCards } from "./LessonGame";
 import LessonHelp from "./LessonHelp";
 
 /** A lesson the teacher shared: read the summary and examples, then take the quiz. Marking happens on the server. */
@@ -19,7 +19,7 @@ export default function Lesson() {
   const guide = guideById(child?.selectedCharacter);
   const q = trpc.studentLessons.get.useQuery({ profileId: child?.id ?? "", shareId }, { enabled: !!child && !!shareId });
   const submit = trpc.studentLessons.submit.useMutation();
-  const [phase, setPhase] = useState<"hub" | "learn" | "practice" | "quiz" | "done">("hub");
+  const [phase, setPhase] = useState<"hub" | "learn" | "practice" | "words" | "match" | "quiz" | "done">("hub");
   const [i, setI] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [shown, setShown] = useState<Record<number, boolean>>({});
@@ -102,6 +102,20 @@ export default function Lesson() {
       </KidShell>
     );
   }
+  if (phase === "words") {
+    return (
+      <KidShell title={lesson.title} color="var(--c-memory)">
+        <WordCards vocab={lesson.vocabulary} guide={guide} d={d} onBack={() => setPhase("hub")} onDone={() => setPhase("match")} />
+      </KidShell>
+    );
+  }
+  if (phase === "match") {
+    return (
+      <KidShell title={lesson.title} color="var(--c-memory)">
+        <MatchGame vocab={lesson.vocabulary} guide={guide} d={d} onExit={() => setPhase("hub")} />
+      </KidShell>
+    );
+  }
   if (phase === "practice") {
     return (
       <KidShell title={lesson.title} color="var(--c-memory)">
@@ -149,6 +163,11 @@ export default function Lesson() {
           {lesson.cards.length + lesson.summary.length > 0 && (
             <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-homework)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("learn"); }}>
               <span className="icon" aria-hidden="true">🎴</span><span><span className="name" style={{ display: "block" }}>{t("Learn it with {name}", { name: guide.short })}</span><span className="sub">{t("Short cards, one idea each")}</span></span>
+            </button>
+          )}
+          {lesson.vocabulary.length > 0 && (
+            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-patterns)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("words"); }}>
+              <span className="icon" aria-hidden="true">🔤</span><span><span className="name" style={{ display: "block" }}>{t("Word cards")}</span><span className="sub">{t("Flip them, then match them")}</span></span>
             </button>
           )}
           {lesson.practice.length > 0 && (

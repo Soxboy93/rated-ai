@@ -13,6 +13,7 @@ Rated AI is a learning companion for primary students (Grades 1–6 first) in Ar
 | Teachers | AI-drafted lessons from a topic or a photo/PDF of the textbook page (you review and edit); teach mode for the board; printable plan and worksheet; share to a class; per-question results; **"what should I re-teach?"** with a plan; **parent notes** (class update or one student) in Arabic or English; printable progress report for parent meetings; a companion chat for ideas |
 | Students | Home screen that says what is next; each lesson as **learn cards**, a **practice game** (instant feedback, not marked) and a **graded quiz**; ask the guide about the lesson; **Safe Search** answers written for their age; games, stories, drawing, mood check-in; read-aloud; accessibility options |
 | Head teacher | **School overview**: students, weekly activity, lessons shared, quiz averages, who needs a check-in, safety flags; a one-page printable **report**; class-by-class table |
+| Platform owner | **Administrator console**: every school, family and student, support actions, an activity log, every access visible to the account owner (`docs/ADMIN.md`) |
 | Safety lead | **Safety inbox**: every flagged message or search, urgent first (self-harm or someone hurting the child), with the student, class, what to do and a "reviewed" mark; per-class **controls**; audit log |
 
 ## How safety works (say this plainly)
@@ -72,7 +73,7 @@ Use the preview (`https://claude.ai/artifact/68rMvmdLmTAiouLmTztxiV` while it ex
 
 These are real gaps. The first three block a larger school.
 
-1. **One account per teacher.** There is no school-level administrator who sees every teacher's classes. The School overview covers the classes of the account you are signed in to. A multi-teacher school needs school accounts with teacher invitations and roles.
+1. **One account per teacher.** There is no *school-level* administrator who sees every teacher's classes. The School overview covers the classes of the account you are signed in to. (There is now a platform **administrator console** for you, the owner, with access to every account: `docs/ADMIN.md`. A school head teacher cannot use it.) A multi-teacher school needs school accounts with teacher invitations and roles.
 2. **No roster or single sign-on integration** (names are typed or pasted in).
 3. **Not hosted.** The app has run only in a test sandbox and a Claude preview. A school needs a hosted, backed-up service on a domain (rated-ai.com is intended) with monitoring.
 4. Arabic text, safety word lists and lesson quality have **not been reviewed** by a Jordanian educator.

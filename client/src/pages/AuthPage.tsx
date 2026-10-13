@@ -101,6 +101,7 @@ export default function AuthPage() {
             <div className="mt-5 space-y-2 border-t pt-4 text-center">
               <p className="text-sm text-gray-600">{t("Just looking? Skip the form:")}</p>
               <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" className="col-span-2" disabled={busy} onClick={() => login.mutate({ email: "admin@rated-ai.example", password: "demo-password" })}>🛡️ {t("See the admin console")}</Button>
                 <Button type="button" variant="outline" disabled={busy} onClick={() => register.mutate({ email: "teacher@demo-school.example", password: "demo-password", accountType: "school", language: lang })}>🏫 {t("See the school demo")}</Button>
                 <Button type="button" variant="outline" disabled={busy} onClick={() => register.mutate({ email: "parent@demo-family.example", password: "demo-password", accountType: "family", language: lang })}>🏠 {t("See the family demo")}</Button>
               </div>

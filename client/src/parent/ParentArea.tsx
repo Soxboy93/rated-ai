@@ -29,6 +29,13 @@ const FAMILY_TABS = [
   ["reports", T("Reports")],
   ["display", T("Display")],
 ] as const;
+// The teacher area is grouped by what a teacher is doing, not by when each screen was built.
+const SCHOOL_GROUPS = [
+  [T("Teach"), [["lessons", T("Lessons")], ["companion", T("Companion")], ["assign", T("Activities")]]],
+  [T("My classes"), [["class", T("Class progress")], ["roster", T("Classes and students")], ["letters", T("Parent notes")]]],
+  [T("Whole school"), [["overview", T("School overview")], ["safety", T("Safety")], ["chats", T("Conversations")]]],
+  [T("Settings"), [["privacy", T("Privacy")], ["display", T("Display")]]],
+] as const;
 const SCHOOL_TABS = [
   ["class", T("Class progress")],
   ["overview", T("School overview")],
@@ -44,7 +51,7 @@ const SCHOOL_TABS = [
 ] as const;
 type Tab = (typeof FAMILY_TABS)[number][0] | (typeof SCHOOL_TABS)[number][0];
 
-function PinGate({ hasPin, school }: { hasPin: boolean; school: boolean }) {
+export function PinGate({ hasPin, school, admin = false, onBack }: { hasPin: boolean; school: boolean; admin?: boolean; onBack?: () => void }) {
   const utils = trpc.useUtils();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -56,7 +63,7 @@ function PinGate({ hasPin, school }: { hasPin: boolean; school: boolean }) {
   const setup = trpc.parent.setPin.useMutation({ onSuccess: () => { setPin(""); refresh(); }, onError: e => setError(t(e.message)) });
   const submit = () => {
     setError("");
-    if (!hasPin) { if (pin.length < 4) return setError(t("Choose a PIN of at least 4 characters.")); setup.mutate({ pin }); }
+    if (!hasPin) { if (pin.length < (admin ? 8 : 4)) return setError(admin ? t("Choose a PIN of at least 8 characters.") : t("Choose a PIN of at least 4 characters.")); setup.mutate({ pin }); }
     else if (!pin) setError(t("Please enter your PIN"));
     else unlock.mutate({ pin });
   };
@@ -67,9 +74,11 @@ function PinGate({ hasPin, school }: { hasPin: boolean; school: boolean }) {
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-teal-700 rounded-full flex items-center justify-center"><Lock className="w-8 h-8 text-white" /></div>
           <div>
-            <CardTitle className="text-2xl">{school ? t("Teacher area") : t("Parent area")}</CardTitle>
+            <CardTitle className="text-2xl">{admin ? t("Admin console") : school ? t("Teacher area") : t("Parent area")}</CardTitle>
             <CardDescription className="mt-2">
-              {hasPin
+              {admin
+                ? (hasPin ? t("Enter your admin PIN to open it") : t("Create an admin PIN (8+ characters). It protects every account here if your password is ever stolen."))
+                : hasPin
                 ? (school ? t("Enter your teacher PIN to open it") : t("Enter your parent PIN to open it"))
                 : (school ? t("Create a teacher PIN so students can't open this area") : t("Create a parent PIN so your child can't open this area"))}
             </CardDescription>
@@ -77,12 +86,14 @@ function PinGate({ hasPin, school }: { hasPin: boolean; school: boolean }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="pin" className="text-sm font-medium">{school ? t("Teacher PIN") : t("Parent PIN")}</label>
-            <Input id="pin" type="password" dir="ltr" maxLength={64} autoComplete="off" placeholder={hasPin ? t("Enter your PIN") : t("Create a PIN (4+ characters)")} value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
+            <label htmlFor="pin" className="text-sm font-medium">{admin ? t("Admin PIN") : school ? t("Teacher PIN") : t("Parent PIN")}</label>
+            <Input id="pin" type="password" dir="ltr" maxLength={64} autoComplete="off" placeholder={hasPin ? t("Enter your PIN") : admin ? t("Create a PIN (8+ characters)") : t("Create a PIN (4+ characters)")} value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
           </div>
           <Button onClick={submit} disabled={unlock.isPending || setup.isPending} className="w-full">{hasPin ? t("Unlock") : t("Set PIN and continue")}</Button>
-          <Link href="/"><Button variant="outline" className="w-full"><ArrowLeft className="w-4 h-4 me-2 rtl:rotate-180" />{school ? t("Back to the students' area") : t("Back to the games")}</Button></Link>
+          {admin ? (onBack && <Button variant="outline" className="w-full" onClick={onBack}>{t("Sign out")}</Button>) : (
+            <Link href="/"><Button variant="outline" className="w-full"><ArrowLeft className="w-4 h-4 me-2 rtl:rotate-180" />{school ? t("Back to the students' area") : t("Back to the games")}</Button></Link>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -196,17 +207,37 @@ export default function ParentArea() {
             <Button variant="outline" size="sm" onClick={() => lock.mutate()}><Lock className="w-4 h-4 me-1" />{t("Lock")}</Button>
           </div>
         </div>
-        <nav className="container mx-auto flex gap-1 overflow-x-auto px-4" aria-label={school ? t("Teacher sections") : t("Parent sections")}>
-          {tabs.map(([id, label]) => (
+        {!school && (
+        <nav className="container mx-auto flex gap-1 overflow-x-auto px-4" aria-label={t("Parent sections")}>
+          {FAMILY_TABS.map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
               className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${tab === id ? "border-teal-700 text-teal-800" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
               {t(label)}
-              {id === "safety" && !!inbox.data?.open && <span className={`ms-1 rounded-full px-1.5 text-xs font-semibold text-white ${inbox.data.urgentOpen ? "bg-red-600" : "bg-amber-600"}`} aria-label={t("{n} to review", { n: inbox.data.open })}>{inbox.data.open}</span>}
             </button>
           ))}
         </nav>
+        )}
       </header>
-      <main className="container mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <div className={school ? "container mx-auto flex flex-col gap-6 px-4 py-6 md:flex-row" : ""}>
+      {school && (
+        <nav className="shrink-0 md:w-56" aria-label={t("Teacher sections")}>
+          <div className="flex gap-4 overflow-x-auto pb-1 md:sticky md:top-24 md:flex-col md:gap-5 md:overflow-visible">
+            {SCHOOL_GROUPS.map(([group, items]) => (
+              <div key={group} className="flex shrink-0 items-center gap-1 md:block md:space-y-1">
+                <p className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{t(group)}</p>
+                {items.map(([id, label]) => (
+                  <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
+                    className={`flex w-full items-center justify-between whitespace-nowrap rounded-md px-3 py-2 text-start text-sm font-medium ${tab === id ? "bg-teal-700 text-white" : "text-gray-700 hover:bg-white"}`}>
+                    <span>{t(label)}</span>
+                    {id === "safety" && !!inbox.data?.open && <span className={`ms-2 rounded-full px-1.5 text-xs font-semibold text-white ${inbox.data.urgentOpen ? "bg-red-600" : "bg-amber-600"}`} aria-label={t("{n} to review", { n: inbox.data.open })}>{inbox.data.open}</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </nav>
+      )}
+      <main className={school ? "min-w-0 flex-1 space-y-6" : "container mx-auto max-w-5xl space-y-6 px-4 py-6"}>
         {school && tab === "class" && <GettingStarted go={setTab} />}
         {tab === "progress" && <ProgressTab />}
         {tab === "class" && <ClassTab />}
@@ -226,6 +257,7 @@ export default function ParentArea() {
           {t("Safety checks use automated keyword screening plus age-appropriate instructions to the AI. They reduce risk but cannot catch everything, so we recommend reviewing conversations. Time limits are not enforced yet.")}
         </p>
       </main>
+      </div>
     </div>
   );
 }

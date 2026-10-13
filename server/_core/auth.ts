@@ -60,7 +60,9 @@ export async function authenticateRequest(req: Request): Promise<SessionUser | n
   const userId = await verify(cookieValue(req, COOKIE_NAME), "session");
   if (!userId) return null;
   const user = await db.getUser(userId);
-  return user ? toSessionUser(user) : null;
+  // A suspended account is signed out everywhere at once. Administrators cannot be suspended, so they can never lock themselves out.
+  if (!user || (user.suspendedAt && user.role !== "admin")) return null;
+  return toSessionUser(user);
 }
 
 /** True when the request carries a valid, unexpired parent-PIN unlock for this user. */

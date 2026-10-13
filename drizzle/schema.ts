@@ -18,6 +18,9 @@ export const users = mysqlTable("users", {
   language: mysqlEnum("language", ["ar", "en"]),
   createdAt: timestamp("createdAt").defaultNow(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow(),
+  // Set by an administrator: the account cannot sign in or use the app until it is cleared.
+  suspendedAt: timestamp("suspendedAt", { fsp: 3 }),
+  suspendedReason: varchar("suspendedReason", { length: 200 }),
 });
 
 export type User = typeof users.$inferSelect;

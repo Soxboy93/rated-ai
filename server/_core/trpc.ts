@@ -30,22 +30,15 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
-export const adminProcedure = t.procedure.use(
-  t.middleware(async opts => {
-    const { ctx, next } = opts;
-
-    if (!ctx.user || ctx.user.role !== 'admin') {
-      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
-
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user,
-      },
-    });
-  }),
-);
+/**
+ * Administrators only. An admin account is made on the server with scripts/make-admin.ts (never by signing up), and
+ * must also have unlocked with its PIN in the last 15 minutes, so a stolen session cookie alone is not enough.
+ */
+export const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  if (!(await isParentUnlocked(ctx.req, ctx.user.id))) throw new TRPCError({ code: "FORBIDDEN", message: PARENT_LOCKED_ERR_MSG });
+  return next({ ctx: { ...ctx, user: ctx.user } });
+});
 
 /** Requires a signed-in account that has recently unlocked parent mode with the PIN. */
 export const parentProcedure = protectedProcedure.use(async ({ ctx, next }) => {

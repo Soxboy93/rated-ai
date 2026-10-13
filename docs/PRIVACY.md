@@ -28,6 +28,7 @@ Status of this document: describes what the **software does today**. It is not l
 | Safe Search questions and answers | `chatSessions`, `chatMessages` (saved like chats, starting with 🔎) | Parent / teacher; operator | Safe questions go to the AI provider to write the answer; flagged ones do not |
 | Teacher companion chat | Not stored | Nobody (cleared when the page closes) | Yes: the messages go to the AI provider |
 | Shared lessons and students' quiz answers/scores | `lesson_shares`, `lesson_results` (answers, score, first attempt only) | The teacher of that class; the student sees their own score | No |
+| Administrator access (support) | Administrators can read any account's classes, students, progress and conversations; each look is logged to the administrator and to the account owner's audit log (`docs/ADMIN.md`) | A very small number of named staff; the account owner sees every access | No |
 | Parent PIN | `parentalSettings` (bcrypt hash) | Nobody | No |
 | Consent records, audit events | `parental_consents`, `audit_events` | Parent (audit); operator | No |
 

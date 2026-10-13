@@ -37,6 +37,7 @@ export default function Home() {
   const ctl = progress?.controls;
   const focus = !!ctl?.focus;
   const more: Tile[] = [
+    ...(lessons.length > 0 ? [{ href: "/boost", name: t("Daily Boost"), sub: t("A quick mix from your lessons"), icon: "🚀", color: "var(--c-memory)" }] : []),
     { href: "/search", name: t("Safe Search"), sub: t("Find things out"), icon: "🔎", color: "var(--c-search)" },
     { href: "/chat", name: t("Chat with {name}", { name: guide.short }), sub: t("Ask me anything"), icon: "💬", color: "var(--c-chat)" },
     { href: "/story", name: t("Story Maker"), sub: t("Dream up a tale"), icon: "📖", color: "var(--c-story)" },
@@ -179,14 +180,24 @@ export default function Home() {
         </section>
 
         {!focus && <section aria-labelledby="games" style={{ display: "grid", gap: 12 }}>
-          <h2 id="games" style={sectionTitle}>{t("Brain games")}</h2>
+          <h2 id="games" style={sectionTitle}>{t("Play and practise")}</h2>
           <div style={grid}>{games.map(renderTile)}</div>
         </section>}
 
-        <section aria-labelledby="more" style={{ display: "grid", gap: 12 }}>
-          <h2 id="more" style={sectionTitle}>{t("Make, ask and explore")}</h2>
-          <div style={grid}>{visibleMore.map((tl, i) => renderTile(tl, i + games.length))}</div>
-        </section>
+        {([
+          ["learn", t("Learn and ask"), ["/boost", "/search", "/chat", "/homework"]],
+          ["create", t("Make something"), ["/story", "/doodle"]],
+          ["me", t("All about me"), ["/pet", "/mood", "/trophies"]],
+        ] as const).map(([id, title, hrefs]) => {
+          const tiles = visibleMore.filter(tl => (hrefs as readonly string[]).includes(tl.href));
+          if (tiles.length === 0) return null;
+          return (
+            <section key={id} aria-labelledby={`g-${id}`} style={{ display: "grid", gap: 12 }}>
+              <h2 id={`g-${id}`} style={sectionTitle}>{title}</h2>
+              <div style={grid}>{tiles.map((tl, i) => renderTile(tl, i))}</div>
+            </section>
+          );
+        })}
 
         <p className="k-card" style={{ display: "flex", gap: 12, alignItems: "center", background: "var(--k-brand-soft)", borderColor: "transparent" }}>
           <span style={{ fontSize: "1.6rem" }} aria-hidden="true">💡</span>

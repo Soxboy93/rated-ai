@@ -19,17 +19,19 @@ export default function LessonHelp({ shareId }: { shareId: string }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [teachBack, setTeachBack] = useState(false);
   const busy = send.isPending || createSession.isPending;
 
   const ask = async (raw: string) => {
     const message = raw.trim();
     if (!message || busy || !child) return;
-    setText(""); setError(""); playSound("tap");
+    const mode = teachBack ? ("teachback" as const) : undefined;
+    setText(""); setError(""); setTeachBack(false); playSound("tap");
     setLines(l => [...l, { who: "me", text: message }]);
     try {
       let sid = sessionId;
       if (!sid) { sid = (await createSession.mutateAsync({ profileId: child.id, characterId: guide.id, language: currentLang() })).sessionId; setSessionId(sid); }
-      const out = await send.mutateAsync({ sessionId: sid, message, shareId });
+      const out = await send.mutateAsync({ sessionId: sid, message, shareId, mode });
       setLines(l => [...l, { who: "ai", text: out.message }]);
       playSound("correct");
     } catch (e) { setError(e instanceof Error ? t(e.message) : t("Something went wrong. Try again!")); }
@@ -50,10 +52,14 @@ export default function LessonHelp({ shareId }: { shareId: string }) {
         {lines.map((l, n) => <div key={n} className={`k-bubble ${l.who === "me" ? "me" : "ai"}`} style={{ alignSelf: l.who === "me" ? "flex-end" : "flex-start" }}>{l.text}</div>)}
         {busy && <div className="k-bubble ai">…</div>}
       </div>
-      {lines.length === 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{starters.map(s => <button key={s} type="button" className="k-btn small light" onClick={() => void ask(s)}>{s}</button>)}</div>}
+      {teachBack && <p className="k-note-good" style={{ padding: 10, borderRadius: 12 }}>🎤 {t("Explain the lesson to {name} in your own words. There are no wrong tries!", { name: guide.short })}</p>}
+      {!teachBack && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {lines.length === 0 && starters.map(s => <button key={s} type="button" className="k-btn small light" onClick={() => void ask(s)}>{s}</button>)}
+        <button type="button" className="k-btn small" style={{ ["--c" as string]: "var(--c-memory)" }} onClick={() => { playSound("tap"); setTeachBack(true); }}>🧑‍🏫 {t("Teach it back to {name}", { name: guide.short })}</button>
+      </div>}
       {error && <p role="alert" className="k-note-bad" style={{ padding: 8, borderRadius: 12 }}>{error}</p>}
       <form style={{ display: "flex", gap: 10 }} onSubmit={e => { e.preventDefault(); void ask(text); }}>
-        <input className="k-input" value={text} maxLength={500} onChange={e => setText(e.target.value)} placeholder={t("Ask {name} anything…", { name: guide.short })} aria-label={t("Your message")} disabled={busy} />
+        <input className="k-input" value={text} maxLength={500} onChange={e => setText(e.target.value)} placeholder={teachBack ? t("Type your explanation…") : t("Ask {name} anything…", { name: guide.short })} aria-label={t("Your message")} disabled={busy} />
         <button type="submit" className="k-btn" disabled={busy || !text.trim()}>{t("Send")}</button>
       </form>
     </section>

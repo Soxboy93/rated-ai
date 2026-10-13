@@ -1033,3 +1033,118 @@ export async function listStudentLessons(classId: string, profileId: string) {
     return [{ shareId: sh.id, lessonId: l.id, title: l.title, subject: l.subject, language: l.language, dueDate: sh.dueDate, content: l.content, result: r ? { correct: r.correct, total: r.total } : null }];
   });
 }
+
+// ---------------------------------------------------------------------------
+// Administration (superadmin console). Read-mostly; every caller must log what it looked at.
+// ---------------------------------------------------------------------------
+export async function setUserRole(id: string, role: "user" | "admin") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ role }).where(eq(users.id, id));
+}
+
+export async function setUserSuspended(id: string, suspended: boolean, reason: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ suspendedAt: suspended ? new Date() : null, suspendedReason: suspended ? reason : null }).where(eq(users.id, id));
+}
+
+export async function setUserPasswordHash(id: string, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ passwordHash }).where(eq(users.id, id));
+}
+
+/** Removes the account's PIN so its owner can choose a new one. */
+export async function clearParentalPin(userId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(schema.parentalSettings).where(eq(schema.parentalSettings.userId, userId));
+}
+
+export type AdminAccountRow = {
+  id: string; email: string | null; name: string | null; accountType: "family" | "school"; role: "user" | "admin"; language: "ar" | "en" | null;
+  createdAt: Date | null; lastSignedIn: Date | null; suspendedAt: Date | null; students: number; classes: number; lessons: number; flaggedOpen: number;
+};
+
+/** One page of accounts with their sizes. `search` matches email or name; paging is by offset. */
+export async function adminListAccounts(opts: { search?: string; type?: "family" | "school"; status?: "active" | "suspended" | "admin"; limit: number; offset: number }): Promise<{ rows: AdminAccountRow[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+  const like = opts.search ? `%${opts.search.replace(/[%_\\]/g, m => `\\${m}`)}%` : null;
+  const where = and(
+    like ? sql`(${users.email} LIKE ${like} OR ${users.name} LIKE ${like})` : undefined,
+    opts.type ? eq(users.accountType, opts.type) : undefined,
+    opts.status === "suspended" ? sql`${users.suspendedAt} IS NOT NULL` : undefined,
+    opts.status === "active" ? and(isNull(users.suspendedAt), eq(users.role, "user")) : undefined,
+    opts.status === "admin" ? eq(users.role, "admin") : undefined,
+  );
+  const [{ n }] = await db.select({ n: sql<string>`COUNT(*)` }).from(users).where(where);
+  const rows = await db
+    .select({
+      id: users.id, email: users.email, name: users.name, accountType: users.accountType, role: users.role, language: users.language,
+      createdAt: users.createdAt, lastSignedIn: users.lastSignedIn, suspendedAt: users.suspendedAt,
+      students: sql<string>`(SELECT COUNT(*) FROM ${schema.userProfiles} p WHERE p.userId = users.id)`,
+      classes: sql<string>`(SELECT COUNT(*) FROM ${schema.schoolClasses} c WHERE c.userId = users.id)`,
+      lessons: sql<string>`(SELECT COUNT(*) FROM ${schema.lessons} l WHERE l.userId = users.id)`,
+      flaggedOpen: sql<string>`(SELECT COUNT(*) FROM ${chatMessages} m JOIN ${chatSessions} s ON s.id = m.sessionId WHERE s.userId = users.id AND m.flagged <> 'safe' AND m.reviewedAt IS NULL AND (m.role = 'user' OR m.flagged = 'blocked'))`,
+    })
+    .from(users)
+    .where(where)
+    .orderBy(desc(users.createdAt))
+    .limit(opts.limit)
+    .offset(opts.offset);
+  return { total: Number(n), rows: rows.map(r => ({ ...r, students: Number(r.students), classes: Number(r.classes), lessons: Number(r.lessons), flaggedOpen: Number(r.flaggedOpen) })) };
+}
+
+/** Whole-platform counts for the admin overview. */
+export async function adminOverview(now = new Date()) {
+  const db = await getDb();
+  if (!db) return { accounts: { family: 0, school: 0, admin: 0, suspended: 0 }, students: 0, signedInLast7Days: 0, playsLast7Days: 0, lessons: 0, flaggedOpen: 0, newAccountsLast30Days: 0 };
+  const week = new Date(now.getTime() - 7 * 86_400_000), month = new Date(now.getTime() - 30 * 86_400_000);
+  const one = async (q: Promise<Array<{ n: string }>>) => Number((await q)[0]?.n ?? 0);
+  const [family, school, admin, suspended, students, active, plays, lessons, flagged, fresh] = await Promise.all([
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(users).where(and(eq(users.accountType, "family"), eq(users.role, "user")))),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(users).where(and(eq(users.accountType, "school"), eq(users.role, "user")))),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(users).where(eq(users.role, "admin"))),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(users).where(sql`${users.suspendedAt} IS NOT NULL`)),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(schema.userProfiles)),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(users).where(gte(users.lastSignedIn, week))),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(schema.gamePlays).where(gte(schema.gamePlays.createdAt, week))),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(schema.lessons)),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(chatMessages).where(and(ne(chatMessages.flagged, "safe"), isNull(chatMessages.reviewedAt), sql`(${chatMessages.role} = 'user' OR ${chatMessages.flagged} = 'blocked')`))),
+    one(db.select({ n: sql<string>`COUNT(*)` }).from(users).where(gte(users.createdAt, month))),
+  ]);
+  return { accounts: { family, school, admin, suspended }, students, signedInLast7Days: active, playsLast7Days: plays, lessons, flaggedOpen: flagged, newAccountsLast30Days: fresh };
+}
+
+/** Students across every account, found by name; with the owning account's email and class. */
+export async function adminSearchStudents(search: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const like = `%${search.replace(/[%_\\]/g, m => `\\${m}`)}%`;
+  return db
+    .select({
+      id: schema.userProfiles.id, childName: schema.userProfiles.childName, ageGroup: schema.userProfiles.ageGroup, userId: schema.userProfiles.userId,
+      ownerEmail: users.email, ownerType: users.accountType, className: schema.schoolClasses.name, createdAt: schema.userProfiles.createdAt,
+    })
+    .from(schema.userProfiles)
+    .innerJoin(users, eq(users.id, schema.userProfiles.userId))
+    .leftJoin(schema.schoolClasses, eq(schema.schoolClasses.id, schema.userProfiles.classId))
+    .where(search ? sql`${schema.userProfiles.childName} LIKE ${like}` : undefined)
+    .orderBy(desc(schema.userProfiles.createdAt))
+    .limit(limit);
+}
+
+/** Recent administrator actions, newest first (written under the administrator's own id). */
+export async function adminListActions(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ id: schema.auditEvents.id, adminId: schema.auditEvents.userId, adminEmail: users.email, action: schema.auditEvents.action, detail: schema.auditEvents.detail, createdAt: schema.auditEvents.createdAt })
+    .from(schema.auditEvents)
+    .leftJoin(users, eq(users.id, schema.auditEvents.userId))
+    .where(sql`${schema.auditEvents.action} LIKE 'admin\\_%'`)
+    .orderBy(desc(schema.auditEvents.createdAt))
+    .limit(limit);
+}

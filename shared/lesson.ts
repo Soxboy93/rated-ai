@@ -21,6 +21,8 @@ export type LessonContent = {
   examples: Array<{ prompt: string; solution: string }>;
   activities: Array<{ title: string; mode: ActivityMode; instructions: string; minutes: number }>;
   quiz: QuizQuestion[];
+  /** Key words with a child-friendly meaning: shown as flip cards and played as a matching game. */
+  vocabulary: Array<{ term: string; meaning: string }>;
   /** Game-mode questions: instant feedback, not marked, so students can play them as often as they like. */
   practice: QuizQuestion[];
   differentiation: { support: string; extension: string };
@@ -29,7 +31,7 @@ export type LessonContent = {
   studentSummary: string[];
 };
 
-const LIMITS = { objectives: 6, steps: 8, board: 6, examples: 5, activities: 5, quiz: 10, practice: 10, misconceptions: 5, summary: 8 };
+const LIMITS = { objectives: 6, steps: 8, board: 6, examples: 5, activities: 5, quiz: 10, practice: 10, vocabulary: 12, misconceptions: 5, summary: 8 };
 
 const str = (v: unknown, max = 1500): string => (typeof v === "string" ? v.replace(/\s+\n/g, "\n").trim().slice(0, max) : "");
 const strList = (v: unknown, max: number, len = 400): string[] =>
@@ -79,6 +81,10 @@ export function normalizeLesson(raw: unknown): LessonContent {
       .slice(0, LIMITS.activities),
     quiz,
     practice,
+    vocabulary: (Array.isArray(r.vocabulary) ? r.vocabulary : [])
+      .map((v: any) => ({ term: str(v?.term, 60), meaning: str(v?.meaning, 160) }))
+      .filter((v: { term: string; meaning: string }, i: number, all: Array<{ term: string }>) => v.term && v.meaning && all.findIndex(x => x.term === v.term) === i)
+      .slice(0, LIMITS.vocabulary),
     differentiation: { support: str(r.differentiation?.support, 1000), extension: str(r.differentiation?.extension, 1000) },
     misconceptions: strList(r.misconceptions, LIMITS.misconceptions),
     homework: str(r.homework, 1000),
@@ -94,6 +100,7 @@ export function studentFacingText(c: LessonContent): string {
     ...c.steps.flatMap(st => [st.title, ...st.board]),
     ...c.quiz.flatMap(q => [q.q, ...q.options, q.explanation]),
     ...c.practice.flatMap(q => [q.q, ...q.options, q.explanation]),
+    ...c.vocabulary.flatMap(v => [v.term, v.meaning]),
   ].join("\n");
 }
 
@@ -108,6 +115,7 @@ export function studentView(c: LessonContent) {
     cards: c.steps.map(s => ({ title: s.title, points: s.board })),
     examples: c.examples,
     practice: c.practice,
+    vocabulary: c.vocabulary,
     quiz: c.quiz.map(q => ({ q: q.q, options: q.options })),
   };
 }
@@ -157,6 +165,7 @@ export const lessonSchemaHint = {
   activities: [{ title: "string", mode: "individual | pair | group", instructions: "string", minutes: 10 }],
   quiz: [{ q: "string", options: ["four distinct options"], answer: "index 0-3 of the correct option", explanation: "string" }],
   practice: [{ q: "string", options: ["four distinct options"], answer: "index 0-3 of the correct option", explanation: "short, friendly string" }],
+  vocabulary: [{ term: "a key word or short phrase", meaning: "a child-friendly meaning, one short sentence" }],
   differentiation: { support: "string", extension: "string" },
   misconceptions: ["string"],
   homework: "string",
@@ -168,7 +177,7 @@ const strArr = { type: "array", items: { type: "string" } } as const;
 export const lessonJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["objectives", "warmup", "steps", "examples", "activities", "quiz", "practice", "differentiation", "misconceptions", "homework", "studentSummary"],
+  required: ["objectives", "warmup", "steps", "examples", "activities", "quiz", "practice", "vocabulary", "differentiation", "misconceptions", "homework", "studentSummary"],
   properties: {
     objectives: strArr,
     warmup: { type: "object", additionalProperties: false, required: ["title", "script", "minutes"], properties: { title: { type: "string" }, script: { type: "string" }, minutes: { type: "integer" } } },
@@ -177,9 +186,47 @@ export const lessonJsonSchema = {
     activities: { type: "array", items: { type: "object", additionalProperties: false, required: ["title", "mode", "instructions", "minutes"], properties: { title: { type: "string" }, mode: { type: "string", enum: ["individual", "pair", "group"] }, instructions: { type: "string" }, minutes: { type: "integer" } } } },
     quiz: { type: "array", items: { type: "object", additionalProperties: false, required: ["q", "options", "answer", "explanation"], properties: { q: { type: "string" }, options: strArr, answer: { type: "integer" }, explanation: { type: "string" } } } },
     practice: { type: "array", items: { type: "object", additionalProperties: false, required: ["q", "options", "answer", "explanation"], properties: { q: { type: "string" }, options: strArr, answer: { type: "integer" }, explanation: { type: "string" } } } },
+    vocabulary: { type: "array", items: { type: "object", additionalProperties: false, required: ["term", "meaning"], properties: { term: { type: "string" }, meaning: { type: "string" } } } },
     differentiation: { type: "object", additionalProperties: false, required: ["support", "extension"], properties: { support: { type: "string" }, extension: { type: "string" } } },
     misconceptions: strArr,
     homework: { type: "string" },
     studentSummary: strArr,
   },
 } as const;
+
+/* ------------------------------------------------------------------------------------ daily boost */
+
+export type BoostQuestion = QuizQuestion & { lessonTitle: string };
+
+/**
+ * A short mixed review across the lessons a class has been given: practice questions plus "what does this word mean?"
+ * questions made from the word cards. Unmarked and answers included, like the practice game. `random` is injectable so
+ * the choice can be tested.
+ */
+export function buildBoost(lessons: Array<{ title: string; content: LessonContent }>, count = 6, random: () => number = Math.random): BoostQuestion[] {
+  const pool: BoostQuestion[] = [];
+  for (const { title, content } of lessons) {
+    for (const q of content.practice) pool.push({ ...q, lessonTitle: title });
+    const words = content.vocabulary;
+    if (words.length >= 4) {
+      words.forEach((w, i) => {
+        const others = words.filter((_, k) => k !== i).map(o => o.meaning);
+        const wrong = others.sort(() => random() - 0.5).slice(0, 3);
+        const options = [...wrong, w.meaning].sort(() => random() - 0.5);
+        pool.push({ q: `\u201C${w.term}\u201D = ?`, options, answer: options.indexOf(w.meaning), explanation: `${w.term}: ${w.meaning}`, lessonTitle: title });
+      });
+    }
+  }
+  // Shuffle, then prefer variety: take at most two questions from one lesson before taking a third.
+  const shuffled = pool.sort(() => random() - 0.5);
+  const taken: BoostQuestion[] = [];
+  const perLesson = new Map<string, number>();
+  for (const cap of [2, 99]) {
+    for (const q of shuffled) {
+      if (taken.length >= count) break;
+      if (taken.includes(q) || (perLesson.get(q.lessonTitle) ?? 0) >= cap) continue;
+      taken.push(q); perLesson.set(q.lessonTitle, (perLesson.get(q.lessonTitle) ?? 0) + 1);
+    }
+  }
+  return taken;
+}

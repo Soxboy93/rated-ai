@@ -41,9 +41,4 @@ export const ENV = {
     ((process.env.LLM_PROVIDER || (claudeKey ? "anthropic" : "openai")).toLowerCase() === "anthropic" && process.env.LLM_MODERATION !== "0"),
   // Shown to parents as the privacy contact. Set before launch.
   privacyContactEmail: process.env.PRIVACY_CONTACT_EMAIL || "",
-  // Comma-separated emails that get the "admin" role on registration.
-  adminEmails: (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean),
 };

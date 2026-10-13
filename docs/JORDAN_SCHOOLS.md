@@ -29,6 +29,8 @@ Decisions made with the owner: **private schools first**; first Arabic content b
 | Getting started | A four-step checklist ticked from real data; disappears when done. | `client/src/parent/GettingStarted.tsx` |
 | iPad install | Web app manifest and home-screen meta tags, so the page can be added to the iPad home screen and opens full screen. No offline mode. | `client/public/manifest.webmanifest` |
 
+Teacher area navigation is grouped: **Teach** (Lessons, Companion, Activities), **My classes** (Class progress, Classes and students, Parent notes), **Whole school** (School overview, Safety, Conversations), **Settings** (Privacy, Display).
+
 How to pitch and pilot this: `docs/SCHOOL_PILOT_KIT.md`.
 
 ### Teacher companion (lessons)
@@ -55,7 +57,7 @@ Class progress comes from game results the **app itself counts** (the browser re
 
 ## How it was checked
 
-- 209 automated tests, including: Arabic generator correctness over hundreds of seeds, Arabic safety rules, an i18n coverage test (every string passed to `t()`/`T()`, shared data, and server error messages must have an Arabic entry with matching `{placeholders}`), class overview maths, roster parsing, and school API permission tests.
+- 228 automated tests, including: Arabic generator correctness over hundreds of seeds, Arabic safety rules, an i18n coverage test (every string passed to `t()`/`T()`, shared data, and server error messages must have an Arabic entry with matching `{placeholders}`), class overview maths, roster parsing, and school API permission tests.
 - Scripted browser runs (Playwright) in Arabic at phone and desktop width: no horizontal overflow on any page checked, equations isolated left-to-right, spelling clue mode, Arabic safety reply, language switch at runtime.
 - A school flow run against a **real MariaDB database and the real server**: register as a school, school consent row (version, language, text hash), class creation, roster import (duplicate, phone number and email skipped), assignment stored, student plays an Arabic maths round and it is saved against that student, teacher sees it, CSV has a BOM and Arabic headers, a second school account cannot see or read any of it (HTTP 403), deleting a class keeps the students, deleting the account leaves zero rows.
 - The lesson flow against the real database and server, driven in a browser: Arabic lesson draft, Islamic-education refusal without a passage, passage stored and sent to the model, teach mode across all slides with keyboard control and reveal, hand edit that drops an incomplete question, AI rewrite, share with a class, a student reading it (no answers or teacher notes visible), server-side grading (3 of 4), first-attempt-only XP, teacher results (per question and per student), companion chat not stored, another account blocked (HTTP 403), delete cascade.
