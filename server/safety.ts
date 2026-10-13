@@ -3,7 +3,7 @@ import type { Lang } from "@shared/jordan";
 import { ENV } from "./_core/env";
 
 export type SafetyLevel = "safe" | "review" | "blocked";
-export type SafetyCategory = "self_harm" | "sexual" | "violence" | "dangerous_activity" | "personal_info";
+export type SafetyCategory = "self_harm" | "being_hurt" | "sexual" | "violence" | "dangerous_activity" | "personal_info";
 
 export type SafetyVerdict = {
   level: SafetyLevel;
@@ -56,6 +56,29 @@ const RULES: Rule[] = [
     reply: {
       en: "I'm really glad you told me. Those feelings are important, and you don't have to handle them alone. Please talk to a grown-up you trust right now, like a parent, a teacher, or a school counselor. If you are in danger, ask an adult to call your local emergency number.",
       ar: "أنا سعيد لأنك أخبرتني. مشاعرك مهمة، ولا يجب أن تتحمّلها وحدك. من فضلك تحدّث الآن مع شخص بالغ تثق به، مثل أحد والديك أو معلّمك أو مرشد المدرسة. وإذا كنت في خطر، اطلب من شخص بالغ الاتصال بالطوارئ فوراً.",
+    },
+  },
+  {
+    // A child saying someone is hurting THEM is not a violent request: they need a caring reply and an adult told.
+    category: "being_hurt",
+    level: "review",
+    patterns: [
+      /\b(?:someone|somebody|he|she|they|kids?|boys?|girls?|students?|teacher|dad|mom|brother|sister|people)\s+(?:hit|hits|beat|beats|kicked|kicks|hurt|hurts|bullied|bullies|touched|touches|pushed|pushes|threatened|threatens)\s+me\b/i,
+      /\b(?:being|getting)\s+(?:bullied|beaten|hit|abused)\b/i,
+      /\b(?:bullying|bullies)\s+me\b/i,
+      /\b(?:abuses|abused|abusing)\s+me\b/i,
+    ],
+    arPatterns: [
+      arPhrase("(?:ب|ي|ت)?(?:ضربني|ضربوني|ضربتني|ضربونا|ضربنا|ضرب?ني|ضرب?ونا)"),
+      arPhrase("(?:ب|ي|ت)?ضربني"),
+      arPhrase("(?:ب|ي|ت)?(?:ي|ت)?تنمر(?:ون|وا|و)?\\s+(?:علي|عليا|علينا)"),
+      arPhrase("(?:تحرش|يتحرش|بتحرش|بيتحرش)\\s+(?:بي|فيني|فينا|بنا)"),
+      arPhrase("(?:ب|ي|ت)?(?:لمسني|لمسوني|لمستني|يلمسني|بلمسني|بيلمسني)"),
+      arPhrase("(?:ب|ي|ت)?(?:يوذيني|اذاني|اذوني|يؤذيني|بوذيني|بيوذيني|بيذيني)"),
+    ],
+    reply: {
+      en: "I'm so sorry that happened to you. You deserve to feel safe, and it is not your fault. Please tell a grown-up you trust right now, like a parent, a teacher, or a school counselor, so they can help. If you are in danger right now, ask an adult to call your local emergency number.",
+      ar: "أنا آسف جداً لأن هذا حدث معك. من حقك أن تشعر بالأمان، وما حدث ليس ذنبك. من فضلك أخبر الآن شخصاً بالغاً تثق به، مثل أحد والديك أو معلّمك أو مرشد المدرسة، ليساعدك. وإذا كنت في خطر الآن، اطلب من شخص بالغ الاتصال بالطوارئ.",
     },
   },
   {
@@ -133,7 +156,7 @@ export async function screenWithProvider(text: string, lang: Lang = "en"): Promi
     // A small Claude model classifies the message; it understands Arabic dialects and spelling that keyword lists miss.
     const { classifyChildMessage } = await import("./_core/anthropic");
     const category = await classifyChildMessage(text);
-    const ruleFor = { self_harm: "self_harm", sexual: "sexual", violence: "violence", hate: "violence", dangerous: "dangerous_activity", personal_info: "personal_info" } as const;
+    const ruleFor = { self_harm: "self_harm", sexual: "sexual", being_hurt: "being_hurt", violence: "violence", hate: "violence", dangerous: "dangerous_activity", personal_info: "personal_info" } as const;
     if (category && category !== "none") {
       const rule = RULES.find(r => r.category === ruleFor[category]);
       if (rule) return { level: rule.level, category: rule.category, reply: rule.reply[lang] };

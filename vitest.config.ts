@@ -14,6 +14,11 @@ export default defineConfig({
     env: {
       JWT_SECRET: "test-secret-test-secret-test-secret-1234",
       LLM_API_KEY: "test-key",
+      // Tests never reach a real AI provider, even when keys exist in the developer's environment.
+      LLM_PROVIDER: "openai",
+      LLM_MODERATION: "0",
+      ANTHROPIC_API_KEY: "",
+      RATEDAI_CLAUDE_KEY: "",
     },
   },
 });

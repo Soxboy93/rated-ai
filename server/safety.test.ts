@@ -110,3 +110,18 @@ describe("dialect and informal variants found by the AI evaluation script", () =
     expect(screenText("I don't want to leave my seat", "en").level).toBe("safe");
   });
 });
+
+describe("a child saying someone is hurting THEM", () => {
+  it("gets a caring reply and is flagged for an adult, never the weapons refusal", () => {
+    for (const [text, lang] of [["حدا ضربني بالمدرسة وبكرهها", "ar"], ["الولاد بيتنمروا علي", "ar"], ["معلمي ضربني", "ar"], ["some kids bullied me at school", "en"], ["he hit me", "en"], ["I'm being bullied", "en"]] as const) {
+      const v = screenText(text, lang);
+      expect(v, text).toMatchObject({ level: "review", category: "being_hurt" });
+      expect(v.reply).not.toMatch(/weapons|أسلحة/);
+    }
+  });
+  it("does not flag ordinary sentences", () => {
+    for (const [text, lang] of [["The ball hit me on the leg during football", "en"], ["ضربت الكرة", "ar"], ["كيف أكتب جملة عن التنمر؟", "ar"], ["What is bullying and how can I help a friend?", "en"]] as const) {
+      expect(screenText(text, lang).level, text).toBe("safe");
+    }
+  });
+});
