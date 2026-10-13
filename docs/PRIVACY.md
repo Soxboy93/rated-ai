@@ -24,6 +24,8 @@ Status of this document: describes what the **software does today**. It is not l
 | Chat messages and AI replies | `chatSessions`, `chatMessages` | Parent dashboard; operator (database) | Message text goes to the configured AI provider (`LLM_API_URL`) to generate replies. Flagged messages are not sent for a reply but may go to the provider's moderation endpoint if `LLM_MODERATION=1` |
 | Homework photos | Sent to the AI provider for analysis; only the extracted question/solution text is stored (`homeworkSubmissions`) | Parent (via future UI); operator | Yes, the image goes to the AI provider |
 | Teacher lesson plans (topic, notes, optional pasted textbook passage, AI-drafted content) | `lessons` | The teacher (own account); operator (database) | Yes: the request and any pasted passage go to the AI provider to write the lesson. Do not paste anything containing student data. |
+| Uploaded textbook page (photo or PDF) | Sent to the AI provider once to copy its text; the file itself is not stored, only the text the teacher keeps in the lesson | The teacher | Yes: the file goes to the AI provider |
+| Safe Search questions and answers | `chatSessions`, `chatMessages` (saved like chats, starting with 🔎) | Parent / teacher; operator | Safe questions go to the AI provider to write the answer; flagged ones do not |
 | Teacher companion chat | Not stored | Nobody (cleared when the page closes) | Yes: the messages go to the AI provider |
 | Shared lessons and students' quiz answers/scores | `lesson_shares`, `lesson_results` (answers, score, first attempt only) | The teacher of that class; the student sees their own score | No |
 | Parent PIN | `parentalSettings` (bcrypt hash) | Nobody | No |

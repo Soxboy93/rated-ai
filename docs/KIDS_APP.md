@@ -53,6 +53,13 @@ Large text, easy-read letters (Lexend font with extra spacing), high contrast, c
 ## Lessons from the teacher
 When a teacher shares a lesson, it appears on the student's home screen. The student reads the summary and worked examples, then takes a short quiz. Answers are shown only after submitting; the server marks the quiz and only the first attempt counts. A finished lesson quiz is saved as a quiz play (so it earns XP and counts towards the quiz badge and the teacher's class numbers).
 
+### Learning like a game, and a companion for the whole school day
+Each lesson now has three ways in: **Learn it with the guide** (short cards, one idea each, built from the teacher's board points, with read-aloud), **the practice game** (instant feedback, a combo counter, stars; not marked, so it can be replayed) and **the graded quiz** (unchanged: answers only after submitting). The practice questions are separate from the quiz, so the game never reveals a graded answer. The home screen opens with a "what's next" card (the most urgent lesson, then a teacher's game, then free play), and the guide can be asked about the lesson in progress: it is given the summary, board points and examples, never the quiz or the teacher's script.
+
+**Safe Search** is not the open web. The child asks, the AI writes a short answer for their age (key facts, a "did you know", three things to explore next, and a "ask a grown-up" note on sensitive topics), with no links. The question goes through the same safety layers as chat (unsafe questions never reach the model), the answer is screened, and every search is saved as a chat starting with 🔎 so a parent or teacher can read it, flagged ones included. Real web search (for example with an allow-list of educational sites) is a possible later step and would need its own safety review.
+
+Teachers can upload a photo or PDF of a textbook page (or a text file) when creating a lesson. The AI copies the text, the teacher checks and edits it, and only then is the lesson drafted from it. Photos are shrunk in the browser; files over 5 MB are refused.
+
 ## Arabic and schools
 The app runs in Arabic (right-to-left) or English; the choice is saved on the account. School accounts add classes, a teacher view and class activities. Details, checks and the list of things that must happen before any school uses it: `docs/JORDAN_SCHOOLS.md`. All Arabic text is an unreviewed draft.
 

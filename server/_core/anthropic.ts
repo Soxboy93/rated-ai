@@ -34,7 +34,7 @@ const getClient = () => {
 /** For tests. */
 export const resetClaudeClient = () => { client = undefined; };
 
-type Block = { type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+type Block = { type: "text"; text: string } | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } } | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
 
 const toBlocks = (content: MessageContent | MessageContent[]): Block[] => {
   const parts = Array.isArray(content) ? content : [content];
@@ -46,6 +46,10 @@ const toBlocks = (content: MessageContent | MessageContent[]): Block[] => {
       const m = /^data:(image\/(?:jpeg|png|gif|webp));base64,([\s\S]+)$/.exec(part.image_url.url);
       if (!m) throw new Error("Only base64 image data URLs are supported");
       out.push({ type: "image", source: { type: "base64", media_type: m[1] as "image/jpeg", data: m[2] } });
+    } else if (part.type === "file_url") {
+      const m = /^data:application\/pdf;base64,([\s\S]+)$/.exec(part.file_url.url);
+      if (!m) throw new Error("Only base64 PDF data URLs are supported");
+      out.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: m[1] } });
     }
   }
   return out;

@@ -9,6 +9,8 @@ import { guideById } from "./guides";
 import { playSound } from "./sound";
 import { t, currentLang } from "@/i18n";
 import Bidi from "@/components/Bidi";
+import { LearnCards, PracticeGame } from "./LessonGame";
+import LessonHelp from "./LessonHelp";
 
 /** A lesson the teacher shared: read the summary and examples, then take the quiz. Marking happens on the server. */
 export default function Lesson() {
@@ -17,7 +19,7 @@ export default function Lesson() {
   const guide = guideById(child?.selectedCharacter);
   const q = trpc.studentLessons.get.useQuery({ profileId: child?.id ?? "", shareId }, { enabled: !!child && !!shareId });
   const submit = trpc.studentLessons.submit.useMutation();
-  const [phase, setPhase] = useState<"read" | "quiz" | "done">("read");
+  const [phase, setPhase] = useState<"hub" | "learn" | "practice" | "quiz" | "done">("hub");
   const [i, setI] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [shown, setShown] = useState<Record<number, boolean>>({});
@@ -91,6 +93,23 @@ export default function Lesson() {
     );
   }
 
+  const d = { dir: dir as "rtl" | "ltr", lang: lesson.language };
+  const startQuiz = () => { startedAt.current = Date.now(); setAnswers([]); setI(0); setPhase("quiz"); };
+  if (phase === "learn") {
+    return (
+      <KidShell title={lesson.title} color="var(--c-homework)">
+        <LearnCards cards={lesson.cards} summary={lesson.summary} guide={guide} d={d} onBack={() => setPhase("hub")} onDone={() => setPhase(lesson.practice.length ? "practice" : "hub")} />
+      </KidShell>
+    );
+  }
+  if (phase === "practice") {
+    return (
+      <KidShell title={lesson.title} color="var(--c-memory)">
+        <PracticeGame questions={lesson.practice} guide={guide} d={d} onExit={() => setPhase("hub")} onQuiz={lesson.result || total === 0 ? undefined : startQuiz} />
+      </KidShell>
+    );
+  }
+
   /* ---------------------------------------------------------------- quiz */
   if (phase === "quiz") {
     const cur = lesson.quiz[i];
@@ -117,20 +136,33 @@ export default function Lesson() {
     );
   }
 
-  /* ---------------------------------------------------------------- read */
+  /* ---------------------------------------------------------------- hub */
   return (
     <KidShell title={lesson.title} color="var(--c-homework)">
       <div style={{ display: "grid", gap: 18, maxWidth: 760, margin: "0 auto" }}>
         <div className="k-card" style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <Avatar guide={guide} size={72} />
-          <p className="k-muted" style={{ fontSize: "1.1rem" }}>{t("Your teacher shared this lesson. Read it, then take the quiz.")}</p>
+          <p className="k-muted" style={{ fontSize: "1.1rem" }}>{t("Your teacher shared this lesson. Pick how you want to learn it!")}</p>
+        </div>
+
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          {lesson.cards.length + lesson.summary.length > 0 && (
+            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-homework)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("learn"); }}>
+              <span className="icon" aria-hidden="true">🎴</span><span><span className="name" style={{ display: "block" }}>{t("Learn it with {name}", { name: guide.short })}</span><span className="sub">{t("Short cards, one idea each")}</span></span>
+            </button>
+          )}
+          {lesson.practice.length > 0 && (
+            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-memory)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("practice"); }}>
+              <span className="icon" aria-hidden="true">🎮</span><span><span className="name" style={{ display: "block" }}>{t("Play the practice game")}</span><span className="sub">{t("Not marked. Play as much as you like")}</span></span>
+            </button>
+          )}
         </div>
 
         <div style={{ display: "grid", gap: 18 }} dir={dir} lang={lesson.language}>
           {lesson.summary.length > 0 && (
             <section className="k-card" style={{ display: "grid", gap: 8 }}>
               <h2 style={{ fontSize: "1.4rem" }}>{t("What to remember")}</h2>
-              <ul style={{ margin: 0, paddingInlineStart: "1.3em", display: "grid", gap: 6, fontSize: "1.1rem" }}>{lesson.summary.map((s, n) => <li key={n}>{s}</li>)}</ul>
+              <ul style={{ margin: 0, paddingInlineStart: "1.3em", listStyle: "disc", display: "grid", gap: 6, fontSize: "1.1rem" }}>{lesson.summary.map((s, n) => <li key={n}>{s}</li>)}</ul>
             </section>
           )}
           {lesson.examples.length > 0 && (
@@ -153,8 +185,9 @@ export default function Lesson() {
             <div><b>{t("You took the quiz.")}</b><p>{t("{a} out of {b} right", { a: lesson.result.correct, b: lesson.result.total })}</p></div>
           </div>
         ) : total > 0 ? (
-          <div><button type="button" className="k-btn" style={{ ["--c" as string]: "var(--c-homework)" }} onClick={() => { startedAt.current = Date.now(); setAnswers([]); setI(0); setPhase("quiz"); }}>📝 {t("Take the quiz")}</button></div>
+          <div><button type="button" className="k-btn" style={{ ["--c" as string]: "var(--c-homework)" }} onClick={startQuiz}>📝 {t("Take the quiz")}</button></div>
         ) : null}
+        {child && <LessonHelp shareId={shareId} />}
       </div>
     </KidShell>
   );

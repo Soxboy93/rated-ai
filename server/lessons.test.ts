@@ -25,7 +25,8 @@ const quiz = [
   { q: "1/3 + 1/3 = ?", options: ["1/3", "2/3", "2/6", "3/3"], answer: 1, explanation: "Add the tops." },
   { q: "2/7 + 3/7 = ?", options: ["5/14", "5/7", "6/7", "1/7"], answer: 1, explanation: "Same bottom." },
 ];
-const draft = { steps: [{ title: "Add", explanation: "Add the tops.", board: ["1/4+2/4=3/4"], minutes: 8 }], quiz, studentSummary: ["Add the tops."], homework: "p.40" };
+const practice = [{ q: "1/5 + 1/5 = ?", options: ["2/10", "2/5", "1/5", "1/10"], answer: 1, explanation: "Tops add, bottom stays." }];
+const draft = { steps: [{ title: "Add", explanation: "SAY: add the tops slowly.", board: ["1/4+2/4=3/4"], minutes: 8 }], quiz, practice, studentSummary: ["Add the tops."], homework: "p.40" };
 const llmJson = (o: unknown) => ({ choices: [{ message: { content: typeof o === "string" ? o : JSON.stringify(o) } }] });
 const lessonRow = (over: Record<string, unknown> = {}) => ({ id: "l1", userId: "t1", title: "Fractions", subject: "math", grade: 4, language: "en", topic: "Fractions", durationMin: 45, sourceText: null, content: JSON.stringify(draft), updatedAt: new Date(), ...over });
 const share = { id: "s1", userId: "t1", classId: "c1", lessonId: "l1", dueDate: null, archivedAt: null, createdAt: new Date() };
@@ -139,13 +140,14 @@ describe("sharing with a class", () => {
 });
 
 describe("students taking a shared lesson", () => {
-  it("shows the quiz without answers or teacher notes", async () => {
+  it("shows the graded quiz without answers, learn cards from the board, and the practice game with answers, never the teacher script", async () => {
     const out = await (await caller()).studentLessons.get({ profileId: "kid1", shareId: "s1" });
-    const text = JSON.stringify(out);
     expect(out.quiz).toHaveLength(2);
-    expect(text).not.toContain("explanation");
-    expect(text).not.toContain('"answer"');
-    expect(text).not.toContain("1/4+2/4"); // the teacher's board notes
+    expect(out.quiz.every(q => !("answer" in q) && !("explanation" in q))).toBe(true);
+    expect(out.cards).toEqual([{ title: "Add", points: ["1/4+2/4=3/4"] }]);
+    expect(out.practice).toHaveLength(1);
+    expect(out.practice[0].answer).toBe(1);
+    expect(JSON.stringify(out)).not.toContain("SAY:"); // the teacher's script
   });
 
   it("is only available to students of that class, and not once archived", async () => {

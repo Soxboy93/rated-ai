@@ -14,9 +14,10 @@ import {
   resolvePlayDay, xpForPlay, type GameId, type ProgressStats,
 } from "@shared/gamification";
 import { screenText, safeFallbackReply } from "../../../server/safety";
+import { MAX_SOURCE_CHARS } from "@shared/lesson";
 import { gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
-import { aiAssistant, aiChat, aiHomework, aiLessonDraft, aiLessonRevise, aiStory, AiRefused } from "./ai";
+import { aiAssistant, aiChat, aiExtractText, aiHomework, aiLessonDraft, aiLessonRevise, aiSearch, aiStory, AiRefused } from "./ai";
 
 class DemoError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -203,6 +204,12 @@ function cannedLesson(topic: string, lang: Lang, source: string | null): LessonC
       { q: "2/5 + 2/5 = ؟", options: ["4/10", "4/5", "2/5", "1/5"], answer: 1, explanation: "المقام لا يتغيّر." },
       { q: "3/9 + 4/9 = ؟", options: ["7/18", "7/9", "12/9", "1/9"], answer: 1, explanation: "3 + 4 = 7 والمقام 9." },
     ],
+    practice: [
+      { q: "1/5 + 1/5 = ؟", options: ["2/10", "2/5", "1/5", "1/10"], answer: 1, explanation: "نجمع البسطين: 1 + 1 = 2، والمقام يبقى 5." },
+      { q: "2/7 + 3/7 = ؟", options: ["5/14", "6/7", "5/7", "1/7"], answer: 2, explanation: "2 + 3 = 5 والمقام 7." },
+      { q: "1/3 + 1/3 = ؟", options: ["2/3", "2/6", "1/3", "1/6"], answer: 0, explanation: "ثلثان!" },
+      { q: "أيّ جملة صحيحة؟", options: ["نجمع المقامين", "نجمع البسطين ونُبقي المقام", "نضرب البسطين", "نطرح المقام"], answer: 1, explanation: "المقام يخبرنا بحجم القطع فلا يتغيّر." },
+    ],
     differentiation: { support: "استخدم الرسم والأشكال لتمثيل الأجزاء.", extension: "اطلب من الطلاب اختراع مسألة كلامية." },
     misconceptions: ["جمع المقامين مع بعضهما"],
     homework: "حلّ ثلاث مسائل من الكتاب.",
@@ -221,6 +228,12 @@ function cannedLesson(topic: string, lang: Lang, source: string | null): LessonC
       { q: "1/4 + 2/4 = ?", options: ["3/8", "3/4", "2/4", "1/2"], answer: 1, explanation: "Add the tops and keep the bottom." },
       { q: "2/5 + 2/5 = ?", options: ["4/10", "4/5", "2/5", "1/5"], answer: 1, explanation: "The denominator stays the same." },
       { q: "3/9 + 4/9 = ?", options: ["7/18", "7/9", "12/9", "1/9"], answer: 1, explanation: "3 + 4 = 7 and the bottom is 9." },
+    ],
+    practice: [
+      { q: "1/5 + 1/5 = ?", options: ["2/10", "2/5", "1/5", "1/10"], answer: 1, explanation: "Add the tops: 1 + 1 = 2, and the bottom stays 5." },
+      { q: "2/7 + 3/7 = ?", options: ["5/14", "6/7", "5/7", "1/7"], answer: 2, explanation: "2 + 3 = 5 and the bottom is 7." },
+      { q: "1/3 + 1/3 = ?", options: ["2/3", "2/6", "1/3", "1/6"], answer: 0, explanation: "Two thirds!" },
+      { q: "Which sentence is true?", options: ["Add the bottoms", "Add the tops, keep the bottom", "Multiply the tops", "Subtract the bottom"], answer: 1, explanation: "The bottom tells the size of the pieces, so it stays." },
     ],
     differentiation: { support: "Use drawings and shapes to show the parts.", extension: "Ask students to invent a word problem." },
     misconceptions: ["Adding the two denominators together"],
@@ -496,7 +509,7 @@ const H: Record<string, Handler> = {
   },
   "chat.getMessages": ({ sessionId }) => { requireUser(); return S.messages.filter(m => m.sessionId === sessionId).sort((a, b) => +a.createdAt - +b.createdAt); },
   "chat.getAllSessions": () => { requireUser(); return S.sessions; },
-  "chat.sendMessage": async ({ sessionId, message }) => {
+  "chat.sendMessage": async ({ sessionId, message, shareId }) => {
     requireConsent();
     const s = S.sessions.find(x => x.id === sessionId); if (!s) throw new DemoError("NOT_FOUND", "Chat session not found");
     const v = screenText(message, s.language); const now = Date.now();
@@ -504,9 +517,35 @@ const H: Record<string, Handler> = {
     S.messages.push({ id: uid(), sessionId, role: "user", content: message, flagged: v.level, createdAt: new Date(now) });
     // Flagged messages never reach the model; only safe ones are sent to Claude.
     const reply = v.level !== "safe" ? (v.reply as string)
-      : (await ai(() => aiChat({ characterId: s.characterId, ageGroup: s.ageGroup, language: s.language, history, message }))) ?? demoReply(message, s.characterId, s.ageGroup, s.language);
+      : (await ai(() => aiChat({ characterId: s.characterId, ageGroup: s.ageGroup, language: s.language, history, message, lessonContext: shareId ? helpContext(shareId) : undefined }))) ?? demoReply(message, s.characterId, s.ageGroup, s.language);
     S.messages.push({ id: uid(), sessionId, role: "assistant", content: reply, flagged: "safe", createdAt: new Date(now + 1) });
     return { message: reply, flagged: v.level };
+  },
+
+  "search.ask": async ({ profileId, query, language, sessionId }) => {
+    requireConsent(); const p = profile(profileId); const lang: Lang = language ?? "en";
+    let sid = sessionId;
+    if (!sid) { sid = uid(); S.sessions.push({ id: sid, userId: "demo-parent", profileId, childName: p.childName, characterId: p.selectedCharacter, ageGroup: p.ageGroup, language: lang, createdAt: new Date() }); }
+    const v = screenText(query, lang); const now = Date.now();
+    S.messages.push({ id: uid(), sessionId: sid, role: "user", content: `🔎 ${query}`, flagged: v.level, createdAt: new Date(now) });
+    if (v.level !== "safe") {
+      S.messages.push({ id: uid(), sessionId: sid, role: "assistant", content: v.reply as string, flagged: "safe", createdAt: new Date(now + 1) });
+      return { sessionId: sid, flagged: v.level, reply: v.reply as string, result: null };
+    }
+    const live = await ai(() => aiSearch(query, p.ageGroup, lang));
+    const result = live ?? (lang === "ar"
+      ? { title: query, answer: "في النسخة الحيّة يبحث لك المساعد بالذكاء الاصطناعي ويكتب إجابة قصيرة تناسب عمرك. (نتيجة تجريبية: لم يتصل المساعد الآن.)", facts: ["الإجابات مكتوبة لعمرك.", "لا نعرض روابط من الإنترنت.", "يستطيع معلّمك قراءة ما تبحث عنه."], didYouKnow: "يمكنك أن تسأل عن أي شيء تحب أن تتعلمه!", related: ["لماذا السماء زرقاء؟", "كيف تطير الطائرات؟", "ماذا تأكل الدببة؟"], askGrownUp: "" }
+      : { title: query, answer: "In the live app the helper looks this up for you and writes a short answer for your age. (Preview result: the AI is not connected right now.)", facts: ["Answers are written for your age.", "No links from the internet are shown.", "Your teacher can read what you search for."], didYouKnow: "You can ask about anything you are curious about!", related: ["Why is the sky blue?", "How do airplanes fly?", "What do bears eat?"], askGrownUp: "" });
+    S.messages.push({ id: uid(), sessionId: sid, role: "assistant", content: `${result.title}\n${result.answer}`, flagged: "safe", createdAt: new Date(now + 1) });
+    return { sessionId: sid, flagged: "safe" as const, reply: null, result };
+  },
+  "lessons.extractText": async ({ data, mimeType }) => {
+    requireParent(); requireConsent(); requireSchool();
+    if (mimeType === "application/pdf") throw new DemoError("BAD_REQUEST", "Reading PDFs works in the live app. In this preview, upload a photo of the page or a text file.");
+    const text = await ai(() => aiExtractText(data));
+    if (text === null) throw new DemoError("BAD_REQUEST", "Reading photos needs the AI. In this preview, allow Claude when asked, or paste the text instead.");
+    if (!text) throw new DemoError("BAD_REQUEST", "We could not find readable text. Try a clearer, well-lit photo.");
+    return { text: text.slice(0, MAX_SOURCE_CHARS), truncated: text.length > MAX_SOURCE_CHARS };
   },
 
   "creative.generateStory": async ({ prompt, language }) => {
@@ -600,6 +639,12 @@ function seedSchool(lang: Lang) {
   S.shares.push({ id: "sh-1", lessonId: lesson.id, classId: cls.id, dueDate: null, createdAt: d(1), archived: false });
   const picks: number[][] = [[1, 1, 1], [1, 1, 0], [1, 0, 1], [1, 1, 1], [0, 1, 0]];
   picks.forEach((answers, i) => { const g = gradeQuiz(lesson.content.quiz, answers); S.lessonResults.push({ shareId: "sh-1", profileId: `p-s${i}`, answers, correct: g.correct, total: g.total }); });
+}
+
+/** What the lesson helper may know: summary, board points and examples; never the graded quiz or the practice answers. */
+function helpContext(shareId: string) {
+  const sh = shareOf(shareId); const l = lessonOf(sh.lessonId); const v = studentView(l.content);
+  return JSON.stringify({ title: l.title, subject: l.subject, grade: l.grade, summary: v.summary, cards: v.cards, examples: v.examples });
 }
 
 /** Runs a live-AI call; a refusal becomes the same friendly error the real server returns, anything else falls back to canned. */

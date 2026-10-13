@@ -35,6 +35,7 @@ export default function Home() {
     href: `/games/${id}`, name: GAME_META[id].name, sub: GAME_META[id].blurb, icon: GAME_META[id].icon, color: GAME_META[id].color,
   }));
   const more: Tile[] = [
+    { href: "/search", name: t("Safe Search"), sub: t("Find things out"), icon: "🔎", color: "var(--c-search)" },
     { href: "/chat", name: t("Chat with {name}", { name: guide.short }), sub: t("Ask me anything"), icon: "💬", color: "var(--c-chat)" },
     { href: "/story", name: t("Story Maker"), sub: t("Dream up a tale"), icon: "📖", color: "var(--c-story)" },
     { href: "/doodle", name: t("Doodle Pad"), sub: t("Draw and stamp"), icon: "🎨", color: "var(--c-doodle)" },
@@ -43,6 +44,19 @@ export default function Home() {
     { href: "/mood", name: t("How I Feel"), sub: t("A quick check-in"), icon: "💛", color: "var(--c-mood)" },
     { href: "/trophies", name: t("Trophy Room"), sub: t("{n} badges", { n: progress?.badges.length ?? 0 }), icon: "🏆", color: "var(--c-trophy)" },
   ];
+
+  // The companion's suggestion for what to do right now: the most urgent unfinished lesson, then a teacher's game, then free play.
+  const openLessons = lessons.filter(l => !l.done).sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
+  const openAssignment = assignments.find(a => !a.done);
+  const hour = new Date().getHours();
+  const dayPart = hour < 12 ? t("Good morning") : hour < 17 ? t("Good afternoon") : t("Good evening");
+  const next = openLessons[0]
+    ? { href: `/lesson/${openLessons[0].shareId}`, icon: "📘", title: openLessons[0].title, hint: t("Your teacher's lesson is ready. Let's learn it together!"), cta: t("Start the lesson") }
+    : openAssignment && GAME_META[openAssignment.game as keyof typeof GAME_META]
+      ? { href: `/games/${openAssignment.game}`, icon: GAME_META[openAssignment.game as keyof typeof GAME_META].icon, title: GAME_META[openAssignment.game as keyof typeof GAME_META].name, hint: t("Your teacher picked this game for you."), cta: t("Play now") }
+      : lessons[0]
+        ? { href: `/lesson/${lessons[0].shareId}`, icon: "🎮", title: lessons[0].title, hint: t("Practise it again with the game. It is not marked!"), cta: t("Practise") }
+        : { href: "/games/math", icon: "🎮", title: t("Play a game"), hint: t("Any game counts"), cta: t("Play now") };
 
   const renderTile = (tl: Tile, i: number) => (
     <Link key={tl.href} href={tl.href} className="k-tile k-in" style={{ ["--c" as string]: tl.color, animationDelay: `${Math.min(i, 10) * 40}ms` }} onClick={() => playSound("tap")}>
@@ -73,6 +87,23 @@ export default function Home() {
               <i style={{ width: `${Math.max(4, Math.round(lp.fraction * 100))}%` }} />
             </div>
             <p className="k-muted" style={{ fontSize: ".95rem" }}>{t("{n} XP to level {level}", { n: lp.next - (progress?.xp ?? 0), level: lp.level + 1 })}</p>
+          </div>
+        </section>
+
+        <section aria-labelledby="today" className="k-card k-in" style={{ display: "grid", gap: 12, background: "var(--k-brand-soft)", borderColor: "transparent" }}>
+          <h2 id="today" style={sectionTitle}>{dayPart}, {child?.childName}! {t("Here is what's next")}</h2>
+          <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "2rem" }} aria-hidden="true">{next.icon}</span>
+            <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+              <b style={{ display: "block", fontSize: "1.2rem" }}><bdi>{next.title}</bdi></b>
+              <span className="k-muted">{next.hint}</span>
+            </div>
+            <Link href={next.href} className="k-btn" onClick={() => playSound("tap")}>{next.cta}</Link>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/search" className="k-btn small light" onClick={() => playSound("tap")}>🔎 {t("Find something out")}</Link>
+            <Link href="/homework" className="k-btn small light" onClick={() => playSound("tap")}>📚 {t("Help with homework")}</Link>
+            <Link href="/chat" className="k-btn small light" onClick={() => playSound("tap")}>💬 {t("Talk to {name}", { name: guide.short })}</Link>
           </div>
         </section>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { currentLang, fmtDate, t, T } from "@/i18n";
 import { CLASS_GRADES, gradeLabel } from "./grades";
 import { selectClass } from "./FamilyPanel";
 import LessonView from "./LessonView";
+import { pickFile } from "@/lib/fileRead";
 
 export const SUBJECT_LABEL: Record<LessonSubject, string> = {
   arabic: T("Arabic"), math: T("Maths"), science: T("Science"), english: T("English"),
@@ -23,6 +24,21 @@ function NewLesson({ onCreated, onCancel }: { onCreated: (id: string) => void; o
   const [language, setLanguage] = useState<Lang>(currentLang());
   const [notes, setNotes] = useState("");
   const [source, setSource] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [reading, setReading] = useState(false);
+  const [readNote, setReadNote] = useState("");
+  const extract = trpc.lessons.extractText.useMutation();
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setReadNote(""); setReading(true);
+    try {
+      const picked = await pickFile(file);
+      const text = picked.kind === "text" ? picked.text : (await extract.mutateAsync({ data: picked.data, mimeType: picked.mimeType })).text;
+      setSource(text.trim().slice(0, MAX_SOURCE_CHARS));
+      setReadNote(text.length > MAX_SOURCE_CHARS ? t("The file was long, so only the first part was kept. Check the text below before you continue.") : t("Check the text below. Fix anything that was read wrongly, then create the lesson."));
+    } catch (e) { setReadNote(t(e instanceof Error ? e.message : "Could not read that file.")); }
+    finally { setReading(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
   const gen = trpc.lessons.generate.useMutation({ onSuccess: out => onCreated(out.id) });
   const needsSource = SOURCE_REQUIRED_SUBJECTS.includes(subject);
   const tooShort = needsSource && source.trim().length < MIN_SOURCE_CHARS;
@@ -70,6 +86,11 @@ function NewLesson({ onCreated, onCancel }: { onCreated: (id: string) => void; o
           </div>
           <div className="space-y-1 sm:col-span-2">
             <label htmlFor="ls-source" className="text-sm font-medium">{needsSource ? t("Textbook passage (required for this subject)") : t("Textbook passage (optional)")}</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input ref={fileRef} id="ls-file" type="file" accept="image/*,application/pdf,.pdf,.txt,.md,text/plain" className="sr-only" onChange={e => void upload(e.target.files?.[0])} />
+              <Button type="button" variant="outline" size="sm" disabled={reading || gen.isPending} onClick={() => fileRef.current?.click()}>📎 {reading ? t("Reading the file…") : t("Upload a photo, PDF or text file")}</Button>
+              {readNote && <span className="text-xs text-gray-600" role="status">{readNote}</span>}
+            </div>
             <textarea id="ls-source" className="min-h-28 w-full rounded-md border border-input bg-background p-3 text-sm" maxLength={MAX_SOURCE_CHARS} value={source} onChange={e => setSource(e.target.value)} />
             <p className="text-xs text-gray-500">{needsSource
               ? t("For this subject the companion only uses the passage you paste, so it cannot invent content. At least {n} characters.", { n: MIN_SOURCE_CHARS })

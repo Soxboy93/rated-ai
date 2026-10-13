@@ -21,13 +21,15 @@ export type LessonContent = {
   examples: Array<{ prompt: string; solution: string }>;
   activities: Array<{ title: string; mode: ActivityMode; instructions: string; minutes: number }>;
   quiz: QuizQuestion[];
+  /** Game-mode questions: instant feedback, not marked, so students can play them as often as they like. */
+  practice: QuizQuestion[];
   differentiation: { support: string; extension: string };
   misconceptions: string[];
   homework: string;
   studentSummary: string[];
 };
 
-const LIMITS = { objectives: 6, steps: 8, board: 6, examples: 5, activities: 5, quiz: 10, misconceptions: 5, summary: 8 };
+const LIMITS = { objectives: 6, steps: 8, board: 6, examples: 5, activities: 5, quiz: 10, practice: 10, misconceptions: 5, summary: 8 };
 
 const str = (v: unknown, max = 1500): string => (typeof v === "string" ? v.replace(/\s+\n/g, "\n").trim().slice(0, max) : "");
 const strList = (v: unknown, max: number, len = 400): string[] =>
@@ -36,6 +38,19 @@ const minutes = (v: unknown, fallback: number) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) && n >= 1 && n <= 90 ? n : fallback;
 };
+
+/** A question is only usable with a prompt, exactly four distinct options, and a valid correct index. */
+function questions(list: unknown, max: number): QuizQuestion[] {
+  const out: QuizQuestion[] = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const options = strList(item?.options, 4, 200);
+    const answer = Number(item?.answer);
+    if (!str(item?.q, 400) || options.length !== 4 || new Set(options).size !== 4 || !Number.isInteger(answer) || answer < 0 || answer > 3) continue;
+    out.push({ q: str(item.q, 400), options, answer, explanation: str(item?.explanation, 600) });
+    if (out.length >= max) break;
+  }
+  return out;
+}
 
 /** Coerces untrusted AI (or client) output into a LessonContent. Throws when there is nothing teachable in it. */
 export function normalizeLesson(raw: unknown): LessonContent {
@@ -46,15 +61,8 @@ export function normalizeLesson(raw: unknown): LessonContent {
     .slice(0, LIMITS.steps);
   if (steps.length === 0) throw new Error("The lesson has no teaching steps.");
 
-  const quiz: QuizQuestion[] = [];
-  for (const item of Array.isArray(r.quiz) ? r.quiz : []) {
-    const options = strList(item?.options, 4, 200);
-    const answer = Number(item?.answer);
-    // A question is only usable with a prompt, exactly four distinct options, and a valid correct index.
-    if (!str(item?.q, 400) || options.length !== 4 || new Set(options).size !== 4 || !Number.isInteger(answer) || answer < 0 || answer > 3) continue;
-    quiz.push({ q: str(item.q, 400), options, answer, explanation: str(item?.explanation, 600) });
-    if (quiz.length >= LIMITS.quiz) break;
-  }
+  const quiz = questions(r.quiz, LIMITS.quiz);
+  const practice = questions(r.practice, LIMITS.practice);
 
   const mode = (m: unknown): ActivityMode => (m === "pair" || m === "group" ? m : "individual");
   return {
@@ -70,6 +78,7 @@ export function normalizeLesson(raw: unknown): LessonContent {
       .filter((a: { title: string; instructions: string }) => a.title || a.instructions)
       .slice(0, LIMITS.activities),
     quiz,
+    practice,
     differentiation: { support: str(r.differentiation?.support, 1000), extension: str(r.differentiation?.extension, 1000) },
     misconceptions: strList(r.misconceptions, LIMITS.misconceptions),
     homework: str(r.homework, 1000),
@@ -82,15 +91,23 @@ export function studentFacingText(c: LessonContent): string {
   return [
     ...c.studentSummary,
     ...c.examples.flatMap(e => [e.prompt, e.solution]),
+    ...c.steps.flatMap(st => [st.title, ...st.board]),
     ...c.quiz.flatMap(q => [q.q, ...q.options, q.explanation]),
+    ...c.practice.flatMap(q => [q.q, ...q.options, q.explanation]),
   ].join("\n");
 }
 
-/** What a student is allowed to see: the quiz WITHOUT answers, a short summary, and worked examples. */
+/**
+ * What a student is allowed to see: learn cards (step titles and the points written on the board, never the teacher's
+ * script), a short summary, worked examples, practice-game questions WITH answers (they are not marked), and the
+ * graded quiz WITHOUT answers.
+ */
 export function studentView(c: LessonContent) {
   return {
     summary: c.studentSummary,
+    cards: c.steps.map(s => ({ title: s.title, points: s.board })),
     examples: c.examples,
+    practice: c.practice,
     quiz: c.quiz.map(q => ({ q: q.q, options: q.options })),
   };
 }
@@ -139,6 +156,7 @@ export const lessonSchemaHint = {
   examples: [{ prompt: "string", solution: "string" }],
   activities: [{ title: "string", mode: "individual | pair | group", instructions: "string", minutes: 10 }],
   quiz: [{ q: "string", options: ["four distinct options"], answer: "index 0-3 of the correct option", explanation: "string" }],
+  practice: [{ q: "string", options: ["four distinct options"], answer: "index 0-3 of the correct option", explanation: "short, friendly string" }],
   differentiation: { support: "string", extension: "string" },
   misconceptions: ["string"],
   homework: "string",
@@ -150,7 +168,7 @@ const strArr = { type: "array", items: { type: "string" } } as const;
 export const lessonJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["objectives", "warmup", "steps", "examples", "activities", "quiz", "differentiation", "misconceptions", "homework", "studentSummary"],
+  required: ["objectives", "warmup", "steps", "examples", "activities", "quiz", "practice", "differentiation", "misconceptions", "homework", "studentSummary"],
   properties: {
     objectives: strArr,
     warmup: { type: "object", additionalProperties: false, required: ["title", "script", "minutes"], properties: { title: { type: "string" }, script: { type: "string" }, minutes: { type: "integer" } } },
@@ -158,6 +176,7 @@ export const lessonJsonSchema = {
     examples: { type: "array", items: { type: "object", additionalProperties: false, required: ["prompt", "solution"], properties: { prompt: { type: "string" }, solution: { type: "string" } } } },
     activities: { type: "array", items: { type: "object", additionalProperties: false, required: ["title", "mode", "instructions", "minutes"], properties: { title: { type: "string" }, mode: { type: "string", enum: ["individual", "pair", "group"] }, instructions: { type: "string" }, minutes: { type: "integer" } } } },
     quiz: { type: "array", items: { type: "object", additionalProperties: false, required: ["q", "options", "answer", "explanation"], properties: { q: { type: "string" }, options: strArr, answer: { type: "integer" }, explanation: { type: "string" } } } },
+    practice: { type: "array", items: { type: "object", additionalProperties: false, required: ["q", "options", "answer", "explanation"], properties: { q: { type: "string" }, options: strArr, answer: { type: "integer" }, explanation: { type: "string" } } } },
     differentiation: { type: "object", additionalProperties: false, required: ["support", "extension"], properties: { support: { type: "string" }, extension: { type: "string" } } },
     misconceptions: strArr,
     homework: { type: "string" },

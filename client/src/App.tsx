@@ -14,6 +14,7 @@ import { AccessibilityProvider } from "./kid/Accessibility";
 import { ChildProvider, useChild } from "./kid/ChildContext";
 import PlayerPicker from "./kid/PlayerPicker";
 import Home from "./kid/Home";
+import Search from "./kid/Search";
 import Chat from "./kid/Chat";
 import Story from "./kid/Story";
 import Doodle from "./kid/Doodle";
@@ -40,6 +41,7 @@ function KidRoutes() {
       <Route path="/games/memory" component={MemoryGame} />
       <Route path="/games/patterns" component={PatternGame} />
       <Route path="/chat" component={Chat} />
+      <Route path="/search" component={Search} />
       <Route path="/story" component={Story} />
       <Route path="/doodle" component={Doodle} />
       <Route path="/mood" component={Mood} />

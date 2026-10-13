@@ -97,24 +97,26 @@ function Editor({ draft, set }: { draft: LessonContent; set: (c: LessonContent) 
         <Button type="button" variant="outline" size="sm" disabled={draft.activities.length >= 5} onClick={() => patch({ activities: [...draft.activities, { title: "", mode: "pair", instructions: "", minutes: 10 }] })}>＋ {t("Add an activity")}</Button>
       </section>
 
-      <section className="space-y-3">
-        <h3 className="font-semibold">{t("Quiz")}</h3>
-        <p className="text-xs text-gray-500">{t("Each question needs four different options and one correct answer. Incomplete questions are dropped when you save.")}</p>
-        {draft.quiz.map((q, i) => (
+      {(["quiz", "practice"] as const).map(kind => (
+      <section key={kind} className="space-y-3">
+        <h3 className="font-semibold">{kind === "quiz" ? t("Quiz") : t("Practice game")}</h3>
+        <p className="text-xs text-gray-500">{kind === "practice" ? t("Students play these as a game with instant feedback, as often as they like. They are not marked.") + " " : ""}{t("Each question needs four different options and one correct answer. Incomplete questions are dropped when you save.")}</p>
+        {draft[kind].map((q, i) => (
           <div key={i} className="space-y-2 rounded-lg border p-3">
-            <Field id={`ed-q-q${i}`} label={t("Question {n}", { n: i + 1 })}><Input id={`ed-q-q${i}`} value={q.q} onChange={e => patch({ quiz: move(draft.quiz, i, { ...q, q: e.target.value }) })} /></Field>
+            <Field id={`ed-${kind}-q${i}`} label={t("Question {n}", { n: i + 1 })}><Input id={`ed-${kind}-q${i}`} value={q.q} onChange={e => patch({ [kind]: move(draft[kind], i, { ...q, q: e.target.value }) })} /></Field>
             {q.options.map((o, k) => (
               <div key={k} className="flex items-center gap-2">
-                <input type="radio" name={`ed-q-a${i}`} aria-label={t("Correct answer: option {n}", { n: k + 1 })} checked={q.answer === k} onChange={() => patch({ quiz: move(draft.quiz, i, { ...q, answer: k }) })} className="h-4 w-4" />
-                <Input aria-label={t("Option {n}", { n: k + 1 })} value={o} onChange={e => patch({ quiz: move(draft.quiz, i, { ...q, options: move(q.options, k, e.target.value) }) })} />
+                <input type="radio" name={`ed-${kind}-a${i}`} aria-label={t("Correct answer: option {n}", { n: k + 1 })} checked={q.answer === k} onChange={() => patch({ [kind]: move(draft[kind], i, { ...q, answer: k }) })} className="h-4 w-4" />
+                <Input aria-label={t("Option {n}", { n: k + 1 })} value={o} onChange={e => patch({ [kind]: move(draft[kind], i, { ...q, options: move(q.options, k, e.target.value) }) })} />
               </div>
             ))}
-            <Field id={`ed-q-e${i}`} label={t("Why this is the answer")}><Input id={`ed-q-e${i}`} value={q.explanation} onChange={e => patch({ quiz: move(draft.quiz, i, { ...q, explanation: e.target.value }) })} /></Field>
-            <Button type="button" variant="outline" size="sm" onClick={() => patch({ quiz: drop(draft.quiz, i) })}>{t("Remove")}</Button>
+            <Field id={`ed-${kind}-e${i}`} label={t("Why this is the answer")}><Input id={`ed-${kind}-e${i}`} value={q.explanation} onChange={e => patch({ [kind]: move(draft[kind], i, { ...q, explanation: e.target.value }) })} /></Field>
+            <Button type="button" variant="outline" size="sm" onClick={() => patch({ [kind]: drop(draft[kind], i) })}>{t("Remove")}</Button>
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" disabled={draft.quiz.length >= 10} onClick={() => patch({ quiz: [...draft.quiz, { q: "", options: ["", "", "", ""], answer: 0, explanation: "" }] })}>＋ {t("Add a question")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={draft[kind].length >= 10} onClick={() => patch({ [kind]: [...draft[kind], { q: "", options: ["", "", "", ""], answer: 0, explanation: "" }] })}>＋ {t("Add a question")}</Button>
       </section>
+      ))}
 
       <Field id="ed-sup" label={t("Support for students who struggle")}><textarea id="ed-sup" rows={2} className={textarea} value={draft.differentiation.support} onChange={e => patch({ differentiation: { ...draft.differentiation, support: e.target.value } })} /></Field>
       <Field id="ed-ext" label={t("Extension for students who finish early")}><textarea id="ed-ext" rows={2} className={textarea} value={draft.differentiation.extension} onChange={e => patch({ differentiation: { ...draft.differentiation, extension: e.target.value } })} /></Field>

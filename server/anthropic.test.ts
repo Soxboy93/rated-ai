@@ -67,6 +67,16 @@ describe("request building", () => {
     expect((claude.buildClaudeRequest({ task: "chat", messages: [{ role: "user", content: "x" }] }).request as any).model).toBe("claude-haiku-5-5");
   });
 
+  it("sends a textbook PDF as a document block and refuses anything that is not a PDF data URL", async () => {
+    const { claude } = await load({});
+    const { request } = claude.buildClaudeRequest({
+      task: "vision",
+      messages: [{ role: "user", content: [{ type: "text", text: "copy" }, { type: "file_url", file_url: { url: "data:application/pdf;base64,JVBERg==", mime_type: "application/pdf" } }] }],
+    });
+    expect((request as any).messages[0].content[1]).toEqual({ type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERg==" } });
+    expect(() => claude.buildClaudeRequest({ messages: [{ role: "user", content: [{ type: "file_url", file_url: { url: "https://example.com/a.pdf" } }] }] })).toThrow();
+  });
+
   it("turns a json schema into structured output and homework photos into image blocks", async () => {
     const { claude } = await load();
     const schema = { type: "object", properties: { a: { type: "string" } }, required: ["a"], additionalProperties: false };
