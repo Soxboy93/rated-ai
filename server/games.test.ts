@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeRng } from "@shared/rng";
-import { makeMathRound, makeSpellingRound, makeQuizRound, makeMemoryDeck, makePatternRound, memoryScore, misspell, quizBank, type AgeId, type Level } from "@shared/games";
+import { makeMathRound, makeSpellingRound, makeQuizRound, makeMemoryDeck, makePatternRound, memoryScore, misspell, quizBank, arabicSpellingBank, type AgeId, type Level } from "@shared/games";
 import { BADGES, earnedBadgeIds, levelFromXp, levelProgress, nextStreak, resolvePlayDay, xpForPlay, MAX_QUESTIONS_PER_PLAY, type ProgressStats } from "@shared/gamification";
 
 const AGES: AgeId[] = ["kids", "tweens", "teens"];
@@ -111,6 +111,77 @@ describe("question generators", () => {
     const slow = memoryScore(6, 30);
     expect(slow.correct).toBeGreaterThanOrEqual(1);
     expect(slow.correct).toBeLessThan(6);
+  });
+});
+
+describe("Arabic question generators", () => {
+  it("always produce 4 distinct options with a valid answer (many seeds)", () => {
+    for (let seed = 1; seed <= 150; seed++) {
+      for (const age of AGES) for (const level of LEVELS) {
+        const rng = makeRng(seed * 11 + level);
+        assertWellFormed(makeMathRound(age, level, rng, 10, "ar"));
+        assertWellFormed(makeSpellingRound(age, level, rng, 5, "ar"));
+        assertWellFormed(makePatternRound(age, level, rng, 6, "ar"));
+        assertWellFormed(makeQuizRound(age, rng, 8, "ar"));
+      }
+    }
+  });
+
+  it("Arabic maths uses the same numbers and the answers are still correct", () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      for (const q of makeMathRound("kids", 3, makeRng(seed), 6, "ar")) {
+        const m = q.prompt.match(/^(\d+) ([+−]) (\d+) = ؟$/)!;
+        expect(m).toBeTruthy();
+        expect(Number(q.options[q.answer])).toBe(m[2] === "+" ? Number(m[1]) + Number(m[3]) : Number(m[1]) - Number(m[3]));
+      }
+      for (const q of makeMathRound("teens", 1, makeRng(seed), 4, "ar")) {
+        const m = q.prompt.match(/ما هو (\d+)% من (\d+)؟/)!;
+        expect(Number(q.options[q.answer])).toBe((Number(m[1]) * Number(m[2])) / 100);
+      }
+      for (const q of makeMathRound("teens", 3, makeRng(seed), 4, "ar")) {
+        const m = q.prompt.match(/(\d+)س \+ (\d+) = (\d+)/)!;
+        expect(Number(m[1]) * Number(q.options[q.answer]) + Number(m[2])).toBe(Number(m[3]));
+      }
+    }
+  });
+
+  it("Arabic spelling: correct option is the word, wrong ones differ, every item has a clue", () => {
+    for (const age of AGES) {
+      const bank = arabicSpellingBank(age);
+      expect(new Set(bank.map(b => b.word)).size).toBe(bank.length);
+      for (const b of bank) {
+        expect(b.wrong).toHaveLength(3);
+        expect(b.wrong).not.toContain(b.word);
+        expect(new Set(b.wrong).size).toBe(3);
+        expect(b.clue.length).toBeGreaterThan(3);
+      }
+    }
+    for (let seed = 1; seed <= 100; seed++) {
+      for (const q of makeSpellingRound("kids", 2, makeRng(seed), 5, "ar")) {
+        expect(q.options[q.answer]).toBe(q.say);
+        expect(q.clue).toBeTruthy();
+      }
+    }
+  });
+
+  it("Arabic quiz bank is unique and well formed", () => {
+    for (const age of AGES) {
+      const bank = quizBank(age, "ar");
+      expect(bank.length).toBeGreaterThanOrEqual(8);
+      expect(new Set(bank.map(b => b.q)).size).toBe(bank.length);
+      for (const b of bank) { expect(b.wrong).not.toContain(b.a); expect(new Set([b.a, ...b.wrong]).size).toBe(4); }
+      expect(makeQuizRound(age, makeRng(3), 8, "ar")).toHaveLength(8);
+    }
+  });
+
+  it("number patterns continue correctly in Arabic too", () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      for (const q of makePatternRound("tweens", 1, makeRng(seed), 3, "ar")) {
+        const nums = q.prompt.replace(/[،,] \?|[،,] ؟/, "").split(/[،,] /).map(Number);
+        expect(nums.some(Number.isNaN)).toBe(false);
+        expect(Number(q.options[q.answer])).toBe(nums[nums.length - 1] + (nums[1] - nums[0]));
+      }
+    }
   });
 });
 
