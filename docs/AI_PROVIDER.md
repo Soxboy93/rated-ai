@@ -34,7 +34,7 @@ None of this is verified against real Jordanian children's messages. Treat it as
 
 1. Create an API key in the Anthropic Console for this product (a separate key from any developer tool, ideally with a spending limit).
 2. Add it **as a secret in the hosting environment**:
-   - In this cloud development environment: the environment menu in the session title bar, then Edit, then add `ANTHROPIC_API_KEY` (under network secrets if offered, otherwise as an environment variable). A new session picks it up.
+   - In this cloud development environment: the environment menu in the session title bar, then Edit. **Claude Code drops the name `ANTHROPIC_API_KEY`**, so add the key as an environment variable named `RATEDAI_CLAUDE_KEY` (the app accepts either name). That box is visible to everyone who can use the environment, so use a key with a spend limit and only share the environment with people you trust. A new session picks it up.
    - On your own server: put it in the server's environment or a `.env` file that is **not** in git (`.env` is already ignored), readable only by the app's user.
 3. Check the connection: `pnpm ai:check` sends one tiny request per model and reports which answered.
 4. Run the evaluation: `pnpm ai:eval` writes `eval-output/ai-eval-<time>.md` (ignored by git) with 14 child-style messages (Arabic dialect and English, safe and unsafe) and 4 lessons (Arabic maths, Arabic science, English grammar, and Arabic values education from a pasted passage). Give the report to a Jordanian teacher to mark.

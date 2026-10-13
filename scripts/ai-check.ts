@@ -6,6 +6,7 @@
 import { ENV } from "../server/_core/env";
 import { invokeLLM, type LLMTask } from "../server/_core/llm";
 
+if (ENV.llmProvider === "anthropic" && !ENV.anthropicApiKey) { console.log("No key: set ANTHROPIC_API_KEY or RATEDAI_CLAUDE_KEY in the environment."); process.exit(1); }
 console.log(`Provider: ${ENV.llmProvider}${ENV.llmProvider === "anthropic" ? ` (${ENV.anthropicApiUrl})` : ` (${ENV.llmApiUrl})`}`);
 const tasks: LLMTask[] = ["chat", "lesson", "assistant", "vision", "summary"];
 let failed = 0;

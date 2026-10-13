@@ -23,7 +23,7 @@ const finalOf = (m: unknown) => ({ finalMessage: () => Promise.resolve(m) });
 
 async function load(env: Record<string, string | undefined> = {}) {
   vi.resetModules();
-  for (const k of ["ANTHROPIC_API_KEY", "LLM_PROVIDER", "LLM_MODERATION", "CLAUDE_FALLBACKS", "ANTHROPIC_API_URL", "CLAUDE_MODEL_CHAT", "CLAUDE_MODEL_LESSON"]) delete process.env[k];
+  for (const k of ["RATEDAI_CLAUDE_KEY", "ANTHROPIC_API_KEY", "LLM_PROVIDER", "LLM_MODERATION", "CLAUDE_FALLBACKS", "ANTHROPIC_API_URL", "CLAUDE_MODEL_CHAT", "CLAUDE_MODEL_LESSON"]) delete process.env[k];
   Object.assign(process.env, { ANTHROPIC_API_KEY: "test-key", ...env });
   for (const [k, v] of Object.entries(env)) if (v === undefined) delete process.env[k];
   return { claude: await import("./_core/anthropic"), env: (await import("./_core/env")).ENV };
@@ -36,6 +36,11 @@ describe("provider selection", () => {
     expect((await load()).env.llmProvider).toBe("anthropic");
     expect((await load({ ANTHROPIC_API_KEY: undefined })).env.llmProvider).toBe("openai");
     expect((await load({ LLM_PROVIDER: "openai" })).env.llmProvider).toBe("openai");
+  });
+  it("also accepts the key under RATEDAI_CLAUDE_KEY, for hosts that reserve the ANTHROPIC_API_KEY name", async () => {
+    const e = (await load({ ANTHROPIC_API_KEY: undefined, RATEDAI_CLAUDE_KEY: "alias-key" })).env;
+    expect(e.llmProvider).toBe("anthropic");
+    expect(e.anthropicApiKey).toBe("alias-key");
   });
   it("turns on the Claude safety classifier by default, but not for other providers, and lets LLM_MODERATION=0 switch it off", async () => {
     expect((await load()).env.providerModeration).toBe(true);

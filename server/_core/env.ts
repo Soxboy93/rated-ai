@@ -1,4 +1,7 @@
 const required = (name: string) => process.env[name] ?? "";
+// Hosting tools such as Claude Code reserve the name ANTHROPIC_API_KEY for themselves and drop it from the
+// environment, so the product also accepts the same key under its own name.
+const claudeKey = process.env.ANTHROPIC_API_KEY || process.env.RATEDAI_CLAUDE_KEY || "";
 
 export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
@@ -11,8 +14,8 @@ export const ENV = {
   // Which kind of model API to call. "anthropic" uses Claude through Anthropic's own API (best results in Arabic
   // and for structured lessons); "openai" is any OpenAI-compatible endpoint (the default, kept for provider choice).
   // When unset, Claude is used if ANTHROPIC_API_KEY is set.
-  llmProvider: ((process.env.LLM_PROVIDER || (process.env.ANTHROPIC_API_KEY ? "anthropic" : "openai")).toLowerCase() === "anthropic" ? "anthropic" : "openai") as "anthropic" | "openai",
-  anthropicApiKey: required("ANTHROPIC_API_KEY"),
+  llmProvider: ((process.env.LLM_PROVIDER || (claudeKey ? "anthropic" : "openai")).toLowerCase() === "anthropic" ? "anthropic" : "openai") as "anthropic" | "openai",
+  anthropicApiKey: claudeKey,
   // Optional gateway/proxy in front of Anthropic's API. Not the ambient ANTHROPIC_BASE_URL, so a developer tool's
   // proxy settings can never redirect the product's traffic.
   anthropicApiUrl: (process.env.ANTHROPIC_API_URL || "https://api.anthropic.com").replace(/\/+$/, ""),
@@ -35,7 +38,7 @@ export const ENV = {
   // With Claude it is on unless LLM_MODERATION=0 (a small Claude model classifies each child message).
   providerModeration:
     process.env.LLM_MODERATION === "1" ||
-    ((process.env.LLM_PROVIDER || (process.env.ANTHROPIC_API_KEY ? "anthropic" : "openai")).toLowerCase() === "anthropic" && process.env.LLM_MODERATION !== "0"),
+    ((process.env.LLM_PROVIDER || (claudeKey ? "anthropic" : "openai")).toLowerCase() === "anthropic" && process.env.LLM_MODERATION !== "0"),
   // Shown to parents as the privacy contact. Set before launch.
   privacyContactEmail: process.env.PRIVACY_CONTACT_EMAIL || "",
   // Comma-separated emails that get the "admin" role on registration.
