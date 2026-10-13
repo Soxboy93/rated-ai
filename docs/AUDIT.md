@@ -146,3 +146,9 @@ Not done and must not be claimed: no native-speaker educator review of any Arabi
 Added: AI-drafted lesson plans (with an optional pasted textbook passage; required for Islamic education), editing and AI rewrite, a full-screen teach mode, printable plan and quiz, sharing a lesson with a class with a server-graded quiz (first attempt only, XP once), per-question class results, and a stateless teacher chat. Migration `0014`. 160 unit/API tests; a browser run of the whole flow against real MariaDB with database assertions (see `docs/JORDAN_SCHOOLS.md`).
 
 Not done and must not be claimed: no Jordanian teacher has reviewed generated lessons; no curriculum or textbook alignment (the app only knows what a teacher pastes); a real model was not used in testing (a stand-in returned fixed lessons); photos of textbook pages, whiteboard capture, live classroom (real-time) quizzes, and lesson sharing between teachers are not built.
+
+## 14. Claude connected (sixth pass)
+
+Added: Claude through Anthropic's API as a selectable provider (`server/_core/anthropic.ts`), per-job models and thinking effort, structured lesson output, refusal handling with server-side fallbacks, a Claude safety classifier for child messages, `pnpm ai:check` and `pnpm ai:eval`, and `docs/AI_PROVIDER.md`. The OpenAI-compatible path is unchanged and still the default without a key. 173 tests (the SDK is mocked; request shapes, fallbacks, refusal and classifier behaviour are tested).
+
+**Not verified:** no live call to Claude has been made, because no product API key exists in this environment. The first real run is `pnpm ai:check` then `pnpm ai:eval`. No claim is made that Claude is better than other providers for Jordanian classrooms; that needs the teacher-read evaluation. Data-protection and retention terms have not been reviewed.

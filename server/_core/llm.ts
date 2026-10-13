@@ -55,7 +55,11 @@ export type ToolChoice =
   | ToolChoiceByName
   | ToolChoiceExplicit;
 
+/** What a call is for. Decides the model, the thinking effort and the output limit when Claude is the provider. */
+export type LLMTask = "chat" | "lesson" | "assistant" | "vision" | "summary";
+
 export type InvokeParams = {
+  task?: LLMTask;
   messages: Message[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
@@ -270,6 +274,10 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  if (ENV.llmProvider === "anthropic") {
+    const { invokeClaude } = await import("./anthropic");
+    return invokeClaude(params);
+  }
   assertApiKey();
 
   const {

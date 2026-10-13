@@ -42,7 +42,7 @@ const RULES: Rule[] = [
       /\b(kill|hurt|harm|cut)\s+(myself|me)\b/i,
       /\bsuicid(e|al)\b/i,
       /\b(want|wanna|going)\s+to\s+die\b/i,
-      /\bdon'?t\s+want\s+to\s+(live|be\s+alive)\b/i,
+      /\bdon'?t\s+(?:want\s+to|wanna)\s+(live|be\s+alive)\b/i,
       /\bend\s+my\s+life\b/i,
     ],
     arPatterns: [
@@ -73,7 +73,7 @@ const RULES: Rule[] = [
     level: "blocked",
     patterns: [/\bhow\s+(do\s+i|to|can\s+i)\s+(kill|murder|stab|shoot|poison)\b/i, /\bmake\s+(a\s+)?(bomb|weapon|gun)\b/i],
     arPatterns: [
-      arPhrase("كيف\\s+(?:اصنع|اعمل|اسوي|اجهز|اركب)\\s+(?:قنبله|سلاح|مسدس|متفجرات|ديناميت|سم)"),
+      arPhrase("كيف\\s+(?:ب|اب)?(?:صنع|اصنع|اعمل|اسوي|اجهز|اركب)\\s+(?:قنبله|سلاح|مسدس|متفجرات|ديناميت|سم)(?:\\s+(?:بالبيت|في البيت|منزليه))?"),
       arPhrase("كيف\\s+(?:اقتل|اذبح|اطعن|اسمم|اطلق\\s+النار\\s+علي|اخنق)"),
     ],
     reply: {
@@ -128,7 +128,19 @@ export function screenText(text: string, lang: Lang = "en"): SafetyVerdict {
 /** Optional provider-side moderation (OpenAI-compatible /moderations). Fails open to the heuristic result. */
 export async function screenWithProvider(text: string, lang: Lang = "en"): Promise<SafetyVerdict> {
   const local = screenText(text, lang);
-  if (local.level !== "safe" || !ENV.providerModeration || !ENV.llmApiKey) return local;
+  if (local.level !== "safe" || !ENV.providerModeration) return local;
+  if (ENV.llmProvider === "anthropic") {
+    // A small Claude model classifies the message; it understands Arabic dialects and spelling that keyword lists miss.
+    const { classifyChildMessage } = await import("./_core/anthropic");
+    const category = await classifyChildMessage(text);
+    const ruleFor = { self_harm: "self_harm", sexual: "sexual", violence: "violence", hate: "violence", dangerous: "dangerous_activity", personal_info: "personal_info" } as const;
+    if (category && category !== "none") {
+      const rule = RULES.find(r => r.category === ruleFor[category]);
+      if (rule) return { level: rule.level, category: rule.category, reply: rule.reply[lang] };
+    }
+    return local;
+  }
+  if (!ENV.llmApiKey) return local;
   try {
     const res = await fetch(`${ENV.llmApiUrl}/moderations`, {
       method: "POST",

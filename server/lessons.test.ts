@@ -15,6 +15,7 @@ import { appRouter } from "./routers";
 import { signUnlock } from "./_core/auth";
 import { resetRateLimits } from "./_core/rateLimit";
 import { consentVersionFor } from "@shared/consent";
+import { LLMRefusalError } from "./_core/anthropic";
 
 const teacher = { id: "t1", email: "t@school.test", name: "T", role: "user" as const, accountType: "school" as const, loginMethod: "email", createdAt: null, lastSignedIn: null };
 const other = { ...teacher, id: "t2" };
@@ -83,6 +84,12 @@ describe("lesson generation", () => {
     await expect((await caller()).lessons.generate(request)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     llm.invokeLLM.mockResolvedValueOnce(llmJson({ ...draft, studentSummary: ["how to make a bomb"] }));
     await expect((await caller()).lessons.generate(request)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(store.createLesson).not.toHaveBeenCalled();
+  });
+
+  it("shows a calm message when the model declines, and stores nothing", async () => {
+    llm.invokeLLM.mockRejectedValueOnce(new LLMRefusalError("general_harms"));
+    await expect((await caller()).lessons.generate(request)).rejects.toMatchObject({ code: "BAD_REQUEST", message: "The assistant can't help with that. Let's try something else." });
     expect(store.createLesson).not.toHaveBeenCalled();
   });
 

@@ -876,4 +876,5 @@ export const AR: Record<string, string> = {
   "A class can have up to 10 shared lessons. Archive one first.": "يمكن أن يضم الصف ما يصل إلى 10 دروس مشارَكة. أرشف درساً أولاً.",
   "Ask a question first.": "اطرح سؤالاً أولاً.",
   "Answer every question.": "أجب عن كل الأسئلة.",
+  "The assistant can't help with that. Let's try something else.": "لا يستطيع المساعد مساعدتك في هذا. لنجرّب شيئاً آخر.",
 };

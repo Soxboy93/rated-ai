@@ -39,6 +39,7 @@ import {
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
+import { LLMRefusalError } from "./_core/anthropic";
 import { checkRateLimit } from "./_core/rateLimit";
 import { systemRouter } from "./_core/systemRouter";
 import {
@@ -51,7 +52,7 @@ import {
 } from "./_core/trpc";
 import { AGE_GROUP_IDS, CHARACTER_IDS, buildSystemPrompt, languageRule } from "./prompts";
 import { assistantSystemPrompt, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "./lessonPrompts";
-import { LESSON_SUBJECTS, MAX_SOURCE_CHARS, MIN_SOURCE_CHARS, SOURCE_REQUIRED_SUBJECTS, gradeQuiz, normalizeLesson, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
+import { lessonJsonSchema, LESSON_SUBJECTS, MAX_SOURCE_CHARS, MIN_SOURCE_CHARS, SOURCE_REQUIRED_SUBJECTS, gradeQuiz, normalizeLesson, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
 import { safeFallbackReply, screenText, screenWithProvider } from "./safety";
 
 const MAX_CHAT_MESSAGE_CHARS = 2000;
@@ -186,6 +187,9 @@ async function llm(params: Parameters<typeof invokeLLM>[0]) {
   try {
     return await invokeLLM(params);
   } catch (error) {
+    if (error instanceof LLMRefusalError) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "The assistant can't help with that. Let's try something else." });
+    }
     console.error("[LLM] request failed:", error);
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: AI_UNAVAILABLE });
   }
@@ -228,7 +232,13 @@ const unreadable = () => new TRPCError({ code: "INTERNAL_SERVER_ERROR", message:
 
 /** Asks the model for a lesson as JSON and coerces it; one bad answer from the model never reaches the database. */
 async function draftLesson(params: Parameters<typeof invokeLLM>[0]): Promise<LessonContent> {
-  const response = await llm({ ...params, response_format: { type: "json_object" } });
+  // Claude (and OpenAI) can be held to the exact lesson shape; other compatible servers only get "return JSON".
+  const strict = ENV.llmProvider === "anthropic" || process.env.LLM_JSON_SCHEMA === "1";
+  const response = await llm({
+    ...params,
+    task: "lesson",
+    response_format: strict ? { type: "json_schema", json_schema: { name: "lesson", schema: lessonJsonSchema as unknown as Record<string, unknown>, strict: true } } : { type: "json_object" },
+  });
   let content: LessonContent;
   try {
     content = normalizeLesson(JSON.parse(textOf(response).replace(/^```(?:json)?\s*|\s*```$/g, "")));
@@ -379,6 +389,7 @@ export const appRouter = router({
           .slice(-MAX_HISTORY_MESSAGES);
 
         const response = await llm({
+          task: "chat",
           messages: [
             { role: "system", content: buildSystemPrompt({ ...session, language: lang }) },
             ...history.map(m => ({ role: m.role, content: m.content })),
@@ -420,6 +431,7 @@ export const appRouter = router({
         checkRateLimit(`creative:${ctx.user.id}`, 10, 60 * 1000);
         await assertPromptAllowed(input.prompt, input.language);
         const response = await llm({
+          task: "chat",
           messages: [
             {
               role: "system",
@@ -482,6 +494,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         checkRateLimit(`homework:${ctx.user.id}`, 10, 60 * 1000);
         const response = await llm({
+          task: "vision",
           messages: [
             {
               role: "system",
@@ -644,6 +657,7 @@ export const appRouter = router({
         .join("\n");
 
       const response = await llm({
+        task: "summary",
         messages: [
           {
             role: "system",
@@ -724,6 +738,7 @@ export const appRouter = router({
       }
 
       const response = await llm({
+        task: "summary",
         messages: [
           {
             role: "system",
@@ -1374,7 +1389,7 @@ export const appRouter = router({
           const row = await requireOwnedLesson(input.lessonId, ctx.user.id);
           context = JSON.stringify({ title: row.title, subject: row.subject, grade: row.grade, content: parseContent(row.content) }).slice(0, 6000);
         }
-        const response = await llm({ messages: [{ role: "system", content: assistantSystemPrompt(input.language, context) }, ...input.messages] });
+        const response = await llm({ task: "assistant", messages: [{ role: "system", content: assistantSystemPrompt(input.language, context) }, ...input.messages] });
         const reply = textOf(response).trim();
         if (!reply) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: AI_UNAVAILABLE });
         return { reply };

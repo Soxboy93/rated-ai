@@ -144,3 +144,23 @@ export const lessonSchemaHint = {
   homework: "string",
   studentSummary: ["short sentences a child can read"],
 };
+
+/** JSON Schema for a whole lesson, so a model that supports structured output must return exactly this shape. */
+const strArr = { type: "array", items: { type: "string" } } as const;
+export const lessonJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["objectives", "warmup", "steps", "examples", "activities", "quiz", "differentiation", "misconceptions", "homework", "studentSummary"],
+  properties: {
+    objectives: strArr,
+    warmup: { type: "object", additionalProperties: false, required: ["title", "script", "minutes"], properties: { title: { type: "string" }, script: { type: "string" }, minutes: { type: "integer" } } },
+    steps: { type: "array", items: { type: "object", additionalProperties: false, required: ["title", "explanation", "board", "minutes"], properties: { title: { type: "string" }, explanation: { type: "string" }, board: strArr, minutes: { type: "integer" } } } },
+    examples: { type: "array", items: { type: "object", additionalProperties: false, required: ["prompt", "solution"], properties: { prompt: { type: "string" }, solution: { type: "string" } } } },
+    activities: { type: "array", items: { type: "object", additionalProperties: false, required: ["title", "mode", "instructions", "minutes"], properties: { title: { type: "string" }, mode: { type: "string", enum: ["individual", "pair", "group"] }, instructions: { type: "string" }, minutes: { type: "integer" } } } },
+    quiz: { type: "array", items: { type: "object", additionalProperties: false, required: ["q", "options", "answer", "explanation"], properties: { q: { type: "string" }, options: strArr, answer: { type: "integer" }, explanation: { type: "string" } } } },
+    differentiation: { type: "object", additionalProperties: false, required: ["support", "extension"], properties: { support: { type: "string" }, extension: { type: "string" } } },
+    misconceptions: strArr,
+    homework: { type: "string" },
+    studentSummary: strArr,
+  },
+} as const;

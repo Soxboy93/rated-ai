@@ -106,3 +106,6 @@ temp/
 *.sqlite
 *.sqlite3
 dist-demo
+
+# AI evaluation reports (may contain model output for review)
+eval-output/

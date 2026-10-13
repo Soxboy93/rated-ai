@@ -34,7 +34,7 @@ On any Linux server with Docker (for example a Hostinger VPS) and the domain's D
 ```bash
 git clone https://github.com/Soxboy93/rated-ai && cd rated-ai
 git checkout claude/parent-auth-safety-provider-neutral   # until merged
-cp .env.example .env    # fill JWT_SECRET, LLM_API_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
+cp .env.example .env    # fill JWT_SECRET, ANTHROPIC_API_KEY (see docs/AI_PROVIDER.md), LLM_API_KEY (only for story pictures), DB_PASSWORD, DB_ROOT_PASSWORD
 docker compose up -d --build
 ```
 Caddy obtains the TLS certificate automatically once DNS resolves to the server and ports 80/443 are open. Migrations run before the app starts. This bundle has not been run in the authoring environment (the Docker client was present but no daemon, so images were not built; the compose file was only syntax-checked with `docker compose config`), so expect to debug the first start.
