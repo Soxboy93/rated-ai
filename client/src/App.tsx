@@ -15,29 +15,21 @@ import { AccessibilityProvider } from "./kid/Accessibility";
 import { ChildProvider, useChild } from "./kid/ChildContext";
 import PlayerPicker from "./kid/PlayerPicker";
 import Home from "./kid/Home";
-import Search from "./kid/Search";
-import Boost from "./kid/Boost";
 import AdminConsole from "./admin/AdminConsole";
-import Chat from "./kid/Chat";
-import Story from "./kid/Story";
-import Doodle from "./kid/Doodle";
+import Ask from "./kid/Ask";
+import Lessons from "./kid/Lessons";
+import Play from "./kid/Play";
+import Me from "./kid/Me";
 import Mood from "./kid/Mood";
-import Trophies from "./kid/Trophies";
-import Pet from "./kid/Pet";
-import Homework from "./kid/Homework";
 import Lesson from "./kid/Lesson";
-import { MathGame, SpellingGame, QuizGame, PatternGame, MemoryGame } from "./kid/games";
+import { MathGame, SpellingGame, QuizGame } from "./kid/games";
 import ParentArea from "./parent/ParentArea";
 import { LangProvider, t, useLang } from "./i18n";
 
-/** Kid routes need to know who is playing; until a profile is chosen, show the picker. */
-/** What a teacher can switch off for a class. In focus mode only lessons, the activities set for the class and the mood check-in stay open. */
+/** What a teacher can switch off for a class. In focus mode only Home, Lessons and Me stay open. */
 function isBlocked(path: string, c: { chat: boolean; search: boolean; focus: boolean } | undefined) {
   if (!c) return false;
-  if (path.startsWith("/chat")) return !c.chat || c.focus;
-  if (path.startsWith("/search")) return !c.search || c.focus;
-  if (c.focus) return ["/story", "/doodle", "/pet", "/homework"].some(p => path.startsWith(p));
-  return false;
+  return !!c.focus && (path.startsWith("/ask") || path.startsWith("/play") || path.startsWith("/games"));
 }
 
 function TurnedOff() {
@@ -52,6 +44,7 @@ function TurnedOff() {
   );
 }
 
+/** Kid routes need to know who is playing; until a profile is chosen, show the picker. */
 function KidRoutes() {
   const { child, profilesLoading, progress } = useChild();
   const [path] = useLocation();
@@ -61,21 +54,15 @@ function KidRoutes() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/lessons" component={Lessons} />
+      <Route path="/lesson/:shareId" component={Lesson} />
+      <Route path="/ask" component={Ask} />
+      <Route path="/play" component={Play} />
       <Route path="/games/math" component={MathGame} />
       <Route path="/games/spelling" component={SpellingGame} />
       <Route path="/games/quiz" component={QuizGame} />
-      <Route path="/games/memory" component={MemoryGame} />
-      <Route path="/games/patterns" component={PatternGame} />
-      <Route path="/chat" component={Chat} />
-      <Route path="/search" component={Search} />
-      <Route path="/boost" component={Boost} />
-      <Route path="/story" component={Story} />
-      <Route path="/doodle" component={Doodle} />
+      <Route path="/me" component={Me} />
       <Route path="/mood" component={Mood} />
-      <Route path="/trophies" component={Trophies} />
-      <Route path="/pet" component={Pet} />
-      <Route path="/homework" component={Homework} />
-      <Route path="/lesson/:shareId" component={Lesson} />
       <Route component={NotFound} />
     </Switch>
   );

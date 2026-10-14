@@ -36,7 +36,7 @@ export default function ProgressTab() {
                     return (
                       <div key={id} className="rounded-lg border p-3">
                         <div className="flex justify-between text-sm"><span>{GAME_META[id].icon} {GAME_META[id].name}</span><span className="text-gray-600">{g ? t("{a} played · {b}% right", { a: g.plays, b: pct }) : t("Not played yet")}</span></div>
-                        <div className="mt-2 h-2 rounded bg-gray-100" role="progressbar" aria-label={t("{name} accuracy", { name: GAME_META[id].name })} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div className="h-2 rounded bg-teal-600" style={{ width: `${pct}%` }} /></div>
+                        <div className="mt-2 h-2 rounded bg-gray-100" role="progressbar" aria-label={t("{name} accuracy", { name: GAME_META[id].name })} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div className="h-2 rounded bg-brand-500" style={{ width: `${pct}%` }} /></div>
                       </div>
                     );
                   })}

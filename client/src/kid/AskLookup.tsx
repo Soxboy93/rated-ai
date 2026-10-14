@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import Avatar from "./Avatar";
-import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { guideById } from "./guides";
 import { playSound } from "./sound";
@@ -13,7 +12,7 @@ const IDEAS = [T("How do volcanoes work?"), T("Why do we have seasons?"), T("Wha
 type Found = { title: string; answer: string; facts: string[]; didYouKnow: string; related: string[]; askGrownUp: string };
 
 /** Safe search: ask anything, get a short answer written for your age. Not the open internet; grown-ups can read every search. */
-export default function Search() {
+export default function AskLookup() {
   const { child } = useChild();
   const guide = guideById(child?.selectedCharacter);
   const ask = trpc.search.ask.useMutation();
@@ -40,8 +39,8 @@ export default function Search() {
   const readAloud = () => found && speak([found.title, found.answer, ...found.facts].join(". "));
 
   return (
-    <KidShell title={t("Safe Search")} color="var(--c-search)">
-      <div style={{ display: "grid", gap: 18, maxWidth: 820, margin: "0 auto" }} ref={topRef}>
+    <>
+      <div style={{ display: "grid", gap: 18 }} ref={topRef}>
         <form className="k-card" style={{ display: "grid", gap: 12 }} onSubmit={e => { e.preventDefault(); void go(text); }}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <Avatar guide={guide} size={64} />
@@ -49,7 +48,7 @@ export default function Search() {
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <input className="k-input" value={text} onChange={e => setText(e.target.value)} maxLength={200} placeholder={t("Type a question or a topic…")} aria-label={t("Search")} disabled={ask.isPending} />
-            <button type="submit" className="k-btn" style={{ ["--c" as string]: "var(--c-search)", whiteSpace: "nowrap" }} disabled={ask.isPending || text.trim().length < 2}>🔎 {t("Search")}</button>
+            <button type="submit" className="k-btn" style={{ ["--c" as string]: "var(--c-ask)", whiteSpace: "nowrap" }} disabled={ask.isPending || text.trim().length < 2}>🔎 {t("Search")}</button>
           </div>
           {!found && !ask.isPending && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -84,6 +83,6 @@ export default function Search() {
         )}
         <p className="k-muted" style={{ fontSize: ".9rem", textAlign: "center" }}>{t("This is a helper, not the whole internet. Your grown-up and teacher can read your searches, and it can make mistakes, so check big facts with them.")}</p>
       </div>
-    </KidShell>
+    </>
   );
 }

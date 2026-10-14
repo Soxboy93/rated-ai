@@ -28,7 +28,7 @@ export function LearnCards({ cards, summary, guide, d, onDone, onBack }: { cards
   return (
     <div style={{ display: "grid", gap: 16, maxWidth: 760, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-homework)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round(((i + 1) / deck.length) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.round(((i + 1) / deck.length) * 100)}%` }} /></div>
+        <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-lesson)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round(((i + 1) / deck.length) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.round(((i + 1) / deck.length) * 100)}%` }} /></div>
         <span className="k-chip">{i + 1} / {deck.length}</span>
       </div>
       <section className="k-card k-in" key={i} dir={d.dir} lang={d.lang} aria-live="polite" style={{ display: "grid", gap: 14, padding: 24 }}>
@@ -95,7 +95,7 @@ export function PracticeGame({ questions, guide, d, onExit, onQuiz }: { question
   return (
     <div style={{ display: "grid", gap: 16, maxWidth: 760, margin: "0 auto" }} dir={d.dir} lang={d.lang}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-memory)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((i / total) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((i / total) * 100))}%` }} /></div>
+        <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-words)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((i / total) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((i / total) * 100))}%` }} /></div>
         <span className="k-chip">{i + 1} / {total}</span>
         <span className="k-chip" aria-label={t("Stars")}>⭐ {right}</span>
         {combo >= 2 && <span className="k-chip k-in" style={{ background: "var(--k-brand)", color: "#fff", borderColor: "transparent" }}>🔥 {combo}</span>}
@@ -156,7 +156,7 @@ export function WordCards({ vocab, guide, d, onDone, onBack }: { vocab: Vocab[];
   return (
     <div style={{ display: "grid", gap: 16, maxWidth: 760, margin: "0 auto" }} dir={d.dir} lang={d.lang}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-memory)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((known / vocab.length) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((known / vocab.length) * 100))}%` }} /></div>
+        <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-words)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((known / vocab.length) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((known / vocab.length) * 100))}%` }} /></div>
         <span className="k-chip">{known} / {vocab.length}</span>
       </div>
       <button type="button" className="k-card k-in" key={`${queue[0]}-${queue.length}`} onClick={() => { playSound("flip"); setFlipped(f => !f); }} aria-live="polite" aria-label={flipped ? t("Hide the meaning") : t("Show the meaning")}

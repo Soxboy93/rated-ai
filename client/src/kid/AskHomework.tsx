@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import Avatar from "./Avatar";
-import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { guideById } from "./guides";
 import { playSound } from "./sound";
@@ -24,7 +23,7 @@ async function toJpegBase64(file: File): Promise<string> {
 
 type Solution = { question: string; steps: string[]; answer: string; explanation: string; subject: string; difficulty: string };
 
-export default function Homework() {
+export default function AskHomework() {
   const { child } = useChild();
   const guide = guideById(child?.selectedCharacter);
   const analyze = trpc.homework.analyzeHomework.useMutation();
@@ -61,8 +60,8 @@ export default function Homework() {
   const allShown = solution ? shown >= total : false;
 
   return (
-    <KidShell title={t("Homework Buddy")} color="var(--c-homework)">
-      <div style={{ display: "grid", gap: 18, maxWidth: 820, margin: "0 auto" }}>
+    <>
+      <div style={{ display: "grid", gap: 18 }}>
         <section className="k-card" style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <Avatar guide={guide} size={90} bob />
@@ -73,13 +72,13 @@ export default function Homework() {
           </div>
           <div role="radiogroup" aria-label={t("Subject")} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {SUBJECTS.map(([s, icon, label]) => (
-              <button key={s} role="radio" aria-checked={subject === s} className="k-btn small light" onClick={() => setSubject(s)} style={{ background: subject === s ? "var(--c-homework)" : undefined, color: subject === s ? "#fff" : undefined }}>{icon} {t(label)}</button>
+              <button key={s} role="radio" aria-checked={subject === s} className="k-btn small light" onClick={() => setSubject(s)} style={{ background: subject === s ? "var(--c-lesson)" : undefined, color: subject === s ? "#fff" : undefined }}>{icon} {t(label)}</button>
             ))}
           </div>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={e => onFile(e.target.files?.[0])} aria-label={t("Choose a homework photo")} />
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="k-btn" style={{ ["--c" as string]: "var(--c-homework)" }} onClick={() => fileRef.current?.click()}>📷 {preview ? t("Choose another photo") : t("Take or choose a photo")}</button>
-            {preview && <button className="k-btn" style={{ ["--c" as string]: "var(--c-memory)" }} onClick={help} disabled={analyze.isPending}>{analyze.isPending ? t("Looking…") : `🔍 ${t("Help me!")}`}</button>}
+            <button className="k-btn" style={{ ["--c" as string]: "var(--c-lesson)" }} onClick={() => fileRef.current?.click()}>📷 {preview ? t("Choose another photo") : t("Take or choose a photo")}</button>
+            {preview && <button className="k-btn" style={{ ["--c" as string]: "var(--c-words)" }} onClick={help} disabled={analyze.isPending}>{analyze.isPending ? t("Looking…") : `🔍 ${t("Help me!")}`}</button>}
           </div>
           {preview && <img src={preview} alt={t("Your homework")} style={{ maxHeight: 280, maxWidth: "100%", objectFit: "contain", border: "1px solid var(--k-line)", borderRadius: 16 }} />}
         </section>
@@ -94,7 +93,7 @@ export default function Homework() {
             <ol style={{ display: "grid", gap: 10, listStyle: "none", padding: 0, margin: 0 }}>
               {solution.steps.slice(0, shown).map((s, n) => (
                 <li key={n} className="k-card k-in" style={{ display: "flex", gap: 12, alignItems: "flex-start", boxShadow: "var(--k-shadow)" }}>
-                  <span className="k-chip" style={{ background: "var(--c-homework)", color: "#fff", flex: "none" }}>{t("Step {n}", { n: n + 1 })}</span>
+                  <span className="k-chip" style={{ background: "var(--c-lesson)", color: "#fff", flex: "none" }}>{t("Step {n}", { n: n + 1 })}</span>
                   <span style={{ flex: 1, fontSize: "1.1rem" }}>{s}</span>
                   {canSpeakIn() && <button className="k-btn small light round" style={{ minHeight: 40, width: 40 }} onClick={() => speak(s)} aria-label={t("Read step {n} aloud", { n: n + 1 })}>🔊</button>}
                 </li>
@@ -107,7 +106,7 @@ export default function Homework() {
               </div>
             )}
             {total > 0 && !allShown && (
-              <button className="k-btn" style={{ ["--c" as string]: "var(--c-homework)", width: "fit-content" }} onClick={() => { setShown(shown + 1); playSound("flip"); }}>
+              <button className="k-btn" style={{ ["--c" as string]: "var(--c-lesson)", width: "fit-content" }} onClick={() => { setShown(shown + 1); playSound("flip"); }}>
                 {shown === 0 ? t("Show me step 1") : `${t("Next step")} ${currentLang() === "ar" ? "⬅" : "➜"}`}
               </button>
             )}
@@ -124,6 +123,6 @@ export default function Homework() {
           </section>
         )}
       </div>
-    </KidShell>
+    </>
   );
 }

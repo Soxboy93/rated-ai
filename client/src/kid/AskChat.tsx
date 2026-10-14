@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import Avatar from "./Avatar";
-import KidShell from "./Shell";
 import { useChild } from "./ChildContext";
 import { GUIDES, guideById, type Guide } from "./guides";
 import { playSound } from "./sound";
@@ -10,7 +9,8 @@ import { canListen, canSpeakIn, listenOnce, speak, stopSpeaking } from "./speech
 
 type Msg = { id: string; role: "user" | "assistant" | "system"; content: string; pending?: boolean };
 
-export default function Chat() {
+/** Talk with your guide about anything you are curious about. Your grown-up can read the chat. */
+export default function AskChat() {
   const { child } = useChild();
   const [guide, setGuide] = useState<Guide>(guideById(child?.selectedCharacter));
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -64,8 +64,8 @@ export default function Chat() {
   };
 
   return (
-    <KidShell title={t("Chat with {name}", { name: guide.short })} color={guide.color}>
-      <div style={{ display: "grid", gap: 16, maxWidth: 820, margin: "0 auto" }}>
+    <>
+      <div style={{ display: "grid", gap: 16 }}>
         <div role="radiogroup" aria-label={t("Pick a guide")} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {GUIDES.map(g => (
             <button key={g.id} role="radio" aria-checked={g.id === guide.id} onClick={() => pickGuide(g)} className="k-chip"
@@ -118,6 +118,6 @@ export default function Chat() {
         {error && <p role="alert" className="k-card k-note-bad">{error}</p>}
         <p className="k-muted" style={{ fontSize: ".9rem", textAlign: "center" }}>{t("Your grown-up can read your chats. Never share your full name, address or phone number.")}</p>
       </div>
-    </KidShell>
+    </>
   );
 }

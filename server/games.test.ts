@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeRng } from "@shared/rng";
-import { makeMathRound, makeSpellingRound, makeQuizRound, makeMemoryDeck, makePatternRound, memoryScore, misspell, quizBank, arabicSpellingBank, type AgeId, type Level } from "@shared/games";
+import { makeMathRound, makeSpellingRound, makeQuizRound, misspell, quizBank, arabicSpellingBank, type AgeId, type Level } from "@shared/games";
 import { BADGES, earnedBadgeIds, levelFromXp, levelProgress, nextStreak, resolvePlayDay, xpForPlay, MAX_QUESTIONS_PER_PLAY, type ProgressStats } from "@shared/gamification";
 
 const AGES: AgeId[] = ["kids", "tweens", "teens"];
@@ -23,7 +23,6 @@ describe("question generators", () => {
         const rng = makeRng(seed * 7 + level);
         assertWellFormed(makeMathRound(age, level, rng, 10));
         assertWellFormed(makeSpellingRound(age, level, rng, 5));
-        assertWellFormed(makePatternRound(age, level, rng, 6));
       }
       assertWellFormed(makeQuizRound("kids", makeRng(seed), 8));
     }
@@ -66,20 +65,6 @@ describe("question generators", () => {
     }
   });
 
-  it("number patterns continue correctly", () => {
-    for (let seed = 1; seed <= 200; seed++) {
-      for (const q of makePatternRound("tweens", 1, makeRng(seed), 3)) {
-        const nums = q.prompt.replace(", ?", "").split(", ").map(Number);
-        const step = nums[1] - nums[0];
-        expect(Number(q.options[q.answer])).toBe(nums[nums.length - 1] + step);
-      }
-      for (const q of makePatternRound("teens", 3, makeRng(seed), 3)) {
-        const nums = q.prompt.replace(", ?", "").split(", ").map(Number);
-        expect(Number(q.options[q.answer])).toBe(nums[nums.length - 1] + nums[nums.length - 2]);
-      }
-    }
-  });
-
   it("spelling: the correct option is the real word and wrong ones are not", () => {
     for (let seed = 1; seed <= 100; seed++) {
       for (const q of makeSpellingRound("teens", 3, makeRng(seed), 5)) {
@@ -98,20 +83,6 @@ describe("question generators", () => {
       expect(makeQuizRound(age, makeRng(3), 8)).toHaveLength(8);
     }
   });
-
-  it("memory decks contain exact pairs and score by efficiency", () => {
-    for (const age of AGES) for (const level of LEVELS) {
-      const deck = makeMemoryDeck(age, level, makeRng(5));
-      const counts = new Map<number, number>();
-      deck.forEach(c => counts.set(c.pairId, (counts.get(c.pairId) ?? 0) + 1));
-      expect(Array.from(counts.values()).every(n => n === 2)).toBe(true);
-      expect(new Set(deck.map(c => c.id)).size).toBe(deck.length);
-    }
-    expect(memoryScore(6, 9)).toEqual({ correct: 6, total: 6 });
-    const slow = memoryScore(6, 30);
-    expect(slow.correct).toBeGreaterThanOrEqual(1);
-    expect(slow.correct).toBeLessThan(6);
-  });
 });
 
 describe("Arabic question generators", () => {
@@ -121,7 +92,6 @@ describe("Arabic question generators", () => {
         const rng = makeRng(seed * 11 + level);
         assertWellFormed(makeMathRound(age, level, rng, 10, "ar"));
         assertWellFormed(makeSpellingRound(age, level, rng, 5, "ar"));
-        assertWellFormed(makePatternRound(age, level, rng, 6, "ar"));
         assertWellFormed(makeQuizRound(age, rng, 8, "ar"));
       }
     }
@@ -174,18 +144,6 @@ describe("Arabic question generators", () => {
     }
   });
 
-  it("number patterns continue correctly in Arabic too", () => {
-    for (let seed = 1; seed <= 100; seed++) {
-      for (const q of makePatternRound("tweens", 1, makeRng(seed), 3, "ar")) {
-        const nums = q.prompt.replace(/[،,] \?|[،,] ؟/, "").split(/[،,] /).map(Number);
-        expect(nums.some(Number.isNaN)).toBe(false);
-        expect(Number(q.options[q.answer])).toBe(nums[nums.length - 1] + (nums[1] - nums[0]));
-      }
-    }
-  });
-});
-
-describe("gamification", () => {
   it("awards XP for correct answers plus a perfect bonus, capped per play", () => {
     expect(xpForPlay(0, 10)).toBe(5);
     expect(xpForPlay(7, 10)).toBe(75);

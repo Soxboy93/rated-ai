@@ -14,7 +14,7 @@ import { t, T, currentLang } from "@/i18n";
 import Confetti from "../Confetti";
 
 type Props = {
-  game: Exclude<GameId, "memory">;
+  game: GameId;
   makeRound: (age: "kids" | "tweens" | "teens", level: Level, rng: () => number) => Choice[];
   levelNames?: [string, string, string];
   autoSpeak?: boolean; // spelling: say the word when the question appears
@@ -158,7 +158,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
 
   if (needsSpeech && !speechOk && currentLang() !== "ar") {
     return (
-      <KidShell title={meta.name} color={meta.color}>
+      <KidShell title={meta.name} back={{ href: "/play", label: t("Play") }}>
         <div className="k-card" style={{ maxWidth: 560, display: "grid", gap: 12 }}>
           <h2>{t("This game needs sound")}</h2>
           <p>{t("Spelling Bee reads each word out loud, and this device can't talk. Try it on a phone, tablet or computer with sound.")}</p>
@@ -171,7 +171,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
   /* ---------------------------------------------------------------- intro */
   if (phase === "intro") {
     return (
-      <KidShell title={meta.name} color={meta.color}>
+      <KidShell title={meta.name} back={{ href: "/play", label: t("Play") }}>
         <div style={{ display: "grid", gap: 22, maxWidth: 720 }}>
           <div className="k-card" style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <span style={{ fontSize: "4rem" }} aria-hidden="true">{meta.icon}</span>
@@ -206,7 +206,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
     const pct = total ? correct / total : 0;
     const stars = pct >= 0.9 ? 3 : pct >= 0.6 ? 2 : 1;
     return (
-      <KidShell title={meta.name} color={meta.color}>
+      <KidShell title={meta.name} back={{ href: "/play", label: t("Play") }}>
         <Confetti fire={confetti} />
         <div className="k-card k-in" style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", display: "grid", gap: 14 }}>
           <Avatar guide={guide} size={120} bob />
@@ -236,7 +236,7 @@ export default function RoundGame({ game, makeRound, levelNames = [T("Easy"), T(
   /* ----------------------------------------------------------------- play */
   const progressPct = Math.round((i / round.length) * 100);
   return (
-    <KidShell title={meta.name} color={meta.color}>
+    <KidShell title={meta.name} back={{ href: "/play", label: t("Play") }}>
       <div style={{ display: "grid", gap: 18, maxWidth: 760, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div className="k-bar" style={{ flex: 1, ["--c" as string]: meta.color }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>

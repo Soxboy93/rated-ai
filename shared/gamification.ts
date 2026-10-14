@@ -1,7 +1,7 @@
 /** XP, levels, streaks and badges. Pure functions shared by the server (authoritative) and the client (display). */
 
-export type GameId = "math" | "spelling" | "quiz" | "memory" | "patterns";
-export const GAME_IDS: readonly GameId[] = ["math", "spelling", "quiz", "memory", "patterns"];
+export type GameId = "math" | "spelling" | "quiz";
+export const GAME_IDS: readonly GameId[] = ["math", "spelling", "quiz"];
 
 export const MOODS = ["happy", "excited", "calm", "tired", "worried", "sad", "angry"] as const;
 export type Mood = (typeof MOODS)[number];
@@ -81,9 +81,7 @@ export const BADGES: readonly Badge[] = [
   { id: "math_5", name: "Number Ninja", description: "Play Number Ninjas 5 times", icon: "🥷", test: s => played(s, "math") >= 5 },
   { id: "spelling_5", name: "Word Wizard", description: "Play Spelling Bee 5 times", icon: "🧙", test: s => played(s, "spelling") >= 5 },
   { id: "quiz_5", name: "Quiz Whiz", description: "Play Quiz Time 5 times", icon: "🧠", test: s => played(s, "quiz") >= 5 },
-  { id: "memory_5", name: "Memory Master", description: "Play Memory Match 5 times", icon: "🐘", test: s => played(s, "memory") >= 5 },
-  { id: "patterns_5", name: "Pattern Pro", description: "Play Pattern Pals 5 times", icon: "🧩", test: s => played(s, "patterns") >= 5 },
-  { id: "explorer", name: "Explorer", description: "Try all five games", icon: "🧭", test: s => GAME_IDS.every(g => played(s, g) >= 1) },
+  { id: "explorer", name: "Explorer", description: "Try all three games", icon: "🧭", test: s => GAME_IDS.every(g => played(s, g) >= 1) },
   { id: "level_5", name: "Level 5", description: "Reach level 5", icon: "⭐", test: s => levelFromXp(s.xp) >= 5 },
   { id: "level_10", name: "Level 10", description: "Reach level 10", icon: "👑", test: s => levelFromXp(s.xp) >= 10 },
   { id: "mood_first", name: "Feelings Friend", description: "Do your first mood check-in", icon: "💛", test: s => s.moodCheckins >= 1 },

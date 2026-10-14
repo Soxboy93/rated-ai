@@ -6,7 +6,7 @@ import { normalizeArabic, toArabicIndicDigits, toWesternDigits } from "@shared/a
 const now = new Date("2026-10-13T10:00:00Z");
 const base = (over: Partial<StudentAggregate>): StudentAggregate => ({
   profileId: "s", childName: "S", ageGroup: "tweens", xp: 0, streakDays: 0, lastPlayDate: null, plays: {}, lastPlayedAt: null,
-  flaggedMessages: 0, flaggedMoods: 0, lastMood: null, assignmentsDone: 0, ...over,
+  flaggedMessages: 0, flaggedMoods: 0, lastMood: null, ...over,
 });
 
 describe("grades and age groups", () => {
@@ -22,7 +22,7 @@ describe("class overview", () => {
         base({ profileId: "a", childName: "A", xp: 255, streakDays: 2, lastPlayDate: "2026-10-12", lastPlayedAt: new Date("2026-10-12T09:00:00Z"), plays: { math: { plays: 2, correct: 15, total: 20 }, quiz: { plays: 1, correct: 6, total: 8 } } }),
         base({ profileId: "b", childName: "B", plays: { math: { plays: 1, correct: 5, total: 10 } }, lastPlayedAt: new Date("2026-10-13T08:00:00Z"), lastPlayDate: "2026-10-13", streakDays: 1 }),
       ],
-      1, "2026-10-13", now
+      "2026-10-13", now
     );
     expect(out.summary.studentCount).toBe(2);
     expect(out.summary.activeThisWeek).toBe(2);
@@ -42,7 +42,7 @@ describe("class overview", () => {
         base({ profileId: "weak", plays: { math: { plays: 3, correct: 10, total: 30 } }, lastPlayedAt: new Date("2026-10-12T00:00:00Z") }),
         base({ profileId: "flag", flaggedMoods: 1, plays: { math: { plays: 3, correct: 25, total: 30 } }, lastPlayedAt: new Date("2026-10-12T00:00:00Z") }),
       ],
-      0, "2026-10-13", now
+      "2026-10-13", now
     );
     const by = Object.fromEntries(out.students.map(s => [s.profileId, s.attention]));
     expect(by.never).toEqual(["inactive"]);
@@ -53,7 +53,7 @@ describe("class overview", () => {
   });
 
   it("shows a lapsed streak as zero", () => {
-    const out = buildClassOverview([base({ streakDays: 5, lastPlayDate: "2026-10-01", lastPlayedAt: new Date("2026-10-01T00:00:00Z"), plays: { math: { plays: 1, correct: 1, total: 1 } } })], 0, "2026-10-13", now);
+    const out = buildClassOverview([base({ streakDays: 5, lastPlayDate: "2026-10-01", lastPlayedAt: new Date("2026-10-01T00:00:00Z"), plays: { math: { plays: 1, correct: 1, total: 1 } } })], "2026-10-13", now);
     expect(out.students[0].streakDays).toBe(0);
   });
 });

@@ -10,8 +10,8 @@ Rated AI is a learning companion for primary students (Grades 1–6 first) in Ar
 
 | For | What |
 |---|---|
-| Teachers | AI-drafted lessons from a topic or a photo/PDF of the textbook page (you review and edit); teach mode for the board; printable plan and worksheet; share to a class; per-question results; **"what should I re-teach?"** with a plan; **parent notes** (class update or one student) in Arabic or English; printable progress report for parent meetings; a companion chat for ideas |
-| Students | Home screen that says what is next; each lesson as **learn cards**, a **practice game** (instant feedback, not marked) and a **graded quiz**; ask the guide about the lesson; **Safe Search** answers written for their age; games, stories, drawing, mood check-in; read-aloud; accessibility options |
+| Teachers | AI-drafted lessons from a topic or a photo/PDF of the textbook page (you review and edit); teach mode for the board; printable plan and worksheet; share to a class; per-question results; **"what should I re-teach?"** with a plan; **parent notes** (class update or one student) in Arabic or English; printable progress report for parent meetings |
+| Students | Home screen that says what is next; each lesson as **learn cards**, a **practice game** (instant feedback, not marked) and a **graded quiz**; ask the guide about the lesson; five places and one bottom bar (Home, Lessons, Ask, Play, Me); **Safe Search** answers written for their age; three games, mood check-in; read-aloud; accessibility options |
 | Head teacher | **School overview**: students, weekly activity, lessons shared, quiz averages, who needs a check-in, safety flags; a one-page printable **report**; class-by-class table |
 | Platform owner | **Administrator console**: every school, family and student, support actions, an activity log, every access visible to the account owner (`docs/ADMIN.md`) |
 | Safety lead | **Safety inbox**: every flagged message or search, urgent first (self-harm or someone hurting the child), with the student, class, what to do and a "reviewed" mark; per-class **controls**; audit log |
@@ -42,8 +42,8 @@ Use the preview (`https://claude.ai/artifact/68rMvmdLmTAiouLmTztxiV` while it ex
 2. **Share it with 4A.** Open the student side, pick a student: *learn cards*, *practice game*, ask the guide "explain it another way", then the quiz.
 3. **Results → What should I re-teach?** Show the hard question, the wrong answer most picked, the plan. Point out no names go to the AI.
 4. **Parent notes → Write a draft.** Class update, then one student. Print.
-5. **Safety.** Show the urgent item first. Say what a teacher would do. Show **Classes and students → Controls** (turn Safe Search off, turn Focus mode on, show the student home).
-6. **School overview → Print the report.** "This is what you would show your owner or the Ministry visit."
+5. **Safety.** Show the urgent item first. Say what a teacher would do. Show **Classes → Controls** (turn Safe Search off, turn Focus mode on, show the student home: Ask and Play disappear).
+6. **Overview → Whole-school numbers → Print the report.** "This is what you would show your owner or the Ministry visit."
 7. Switch the language toggle to Arabic at any point.
 
 ## A pilot that can succeed (4–6 weeks)
@@ -78,8 +78,8 @@ These are real gaps. The first three block a larger school.
 3. **Not hosted.** The app has run only in a test sandbox and a Claude preview. A school needs a hosted, backed-up service on a domain (rated-ai.com is intended) with monitoring.
 4. Arabic text, safety word lists and lesson quality have **not been reviewed** by a Jordanian educator.
 5. Legal review (privacy law, data leaving Jordan, parental consent wording, any Ministry approval for private schools) has **not** been done.
-6. No live whole-class game, no parent login or portal (notes are printed or copied), no time-of-day limits, no offline mode.
-7. Story pictures and avatars need a separate image service key; web search is not offered (safe search is AI-written).
+6. No live whole-class game, no parent login or portal (notes are printed or copied), no assigned homework/activities, no time-of-day limits, no offline mode.
+7. Web search is not offered (safe search is AI-written). Stories, drawing, a pet, assigned activities and AI-written weekly reports were removed on purpose to keep the product simple (`docs/SCOPE.md`).
 8. Accessibility has been checked by scripts and by eye, not by an audit with users with disabilities. No load testing on real tablets or school networks.
 
 ## Before you meet a school

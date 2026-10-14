@@ -62,7 +62,7 @@ describe("consent gate", () => {
     const { api } = await caller();
     await expect(api.chat.createSession({ profileId: "p1" })).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringMatching(/consent/i) });
     await expect(api.chat.sendMessage({ sessionId: "s1", message: "hi" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(api.creative.generateStory({ prompt: "a dragon" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(api.search.ask({ profileId: "p1", query: "volcanoes", language: "en" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(llm.invokeLLM).not.toHaveBeenCalled();
   });
 

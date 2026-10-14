@@ -26,14 +26,12 @@ export const ENV = {
     chat: process.env.CLAUDE_MODEL_CHAT || "claude-sonnet-5-5",
     assistant: process.env.CLAUDE_MODEL_ASSISTANT || process.env.CLAUDE_MODEL_CHAT || "claude-sonnet-5-5",
     vision: process.env.CLAUDE_MODEL_VISION || process.env.CLAUDE_MODEL_CHAT || "claude-sonnet-5-5",
-    summary: process.env.CLAUDE_MODEL_SUMMARY || process.env.CLAUDE_MODEL_CHAT || "claude-sonnet-5-5",
     safety: process.env.CLAUDE_MODEL_SAFETY || "claude-haiku-5-5",
   },
   // Ask Anthropic to re-run a request on a fallback model if its safety systems decline it (set to 0 to turn off).
   claudeFallbacks: process.env.CLAUDE_FALLBACKS !== "0",
   llmModel: process.env.LLM_MODEL || "gpt-4o-mini",
   llmVisionModel: process.env.LLM_VISION_MODEL || process.env.LLM_MODEL || "gpt-4o-mini",
-  imageModel: process.env.IMAGE_MODEL || "gpt-image-1",
   // Set to "1" to also call the provider's /moderations endpoint (OpenAI-compatible).
   // With Claude it is on unless LLM_MODERATION=0 (a small Claude model classifies each child message).
   providerModeration:

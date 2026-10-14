@@ -15,13 +15,13 @@ import {
 } from "@shared/gamification";
 import { screenText, safeFallbackReply } from "../../../server/safety";
 import { MAX_SOURCE_CHARS } from "@shared/lesson";
-import { buildBoost, gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
+import { gradeQuiz, normalizeLesson, studentView, SOURCE_REQUIRED_SUBJECTS, MIN_SOURCE_CHARS, type LessonContent } from "@shared/lesson";
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "@shared/const";
 import { sortInbox, urgencyOf, type InboxItem } from "@shared/safetyInbox";
 import { makeAdminHandlers } from "./adminDemo";
 import { buildSchoolOverview } from "@shared/schoolReport";
 import { analyzeResults, insightFacts, MIN_RESULTS_FOR_INSIGHT } from "@shared/insights";
-import { aiInsights, aiLetter, aiAssistant, aiChat, aiExtractText, aiHomework, aiLessonDraft, aiLessonRevise, aiSearch, aiStory, AiRefused } from "./ai";
+import { aiInsights, aiLetter, aiChat, aiExtractText, aiHomework, aiLessonDraft, aiLessonRevise, aiSearch, AiRefused } from "./ai";
 
 class DemoError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -37,7 +37,6 @@ const controlsOf = (c: Cls | undefined) => ({ chat: c?.chatEnabled !== false, se
 const TURNED_OFF = "Your teacher has turned this off for now.";
 type Lesson = { id: string; title: string; subject: string; grade: number; language: Lang; topic: string; durationMin: number; sourceText: string | null; content: LessonContent; updatedAt: Date };
 type Share = { id: string; lessonId: string; classId: string; dueDate: string | null; createdAt: Date; archived: boolean };
-type Assignment = { id: string; classId: string; game: GameId; level: number; note: string | null; dueDate: string | null; createdAt: Date; archived: boolean };
 type Play = { id: string; profileId: string; game: GameId; level: number; correct: number; total: number; xpEarned: number; createdAt: Date };
 type Msg = { id: string; sessionId: string; role: "user" | "assistant"; content: string; flagged: "safe" | "review" | "blocked"; createdAt: Date; reviewedAt?: Date | null };
 type Session = { id: string; userId: string; profileId: string; childName: string; characterId: string | null; ageGroup: string; language: Lang; createdAt: Date };
@@ -50,7 +49,6 @@ function fresh() {
     lessons: [] as Lesson[],
     shares: [] as Share[],
     lessonResults: [] as Array<{ shareId: string; profileId: string; answers: number[]; correct: number; total: number }>,
-    assignments: [] as Assignment[],
     pin: null as string | null,
     unlocked: false,
     profiles: [] as Profile[],
@@ -60,7 +58,6 @@ function fresh() {
     moods: [] as Array<{ profileId: string; mood: string; note: string | null; flagged: string; createdAt: Date }>,
     sessions: [] as Session[],
     messages: [] as Msg[],
-    pet: null as null | Record<string, any>,
     a11y: { dyslexiaMode: 0, adhdMode: 0, autismMode: 0, fontSize: "medium", highContrast: 0, textToSpeech: 0, reducedMotion: 0 } as Record<string, any>,
     audit: [] as Array<{ id: string; action: string; detail: string | null; createdAt: Date }>,
     summary: null as any,
@@ -117,12 +114,6 @@ function recordPlay(profileId: string, game: GameId, level: number, correct: num
 }
 const named = (ids: string[]) => ids.map(id => ({ id, name: badgeById(id)?.name ?? id, icon: badgeById(id)?.icon ?? "🏅" }));
 
-const doneBy = (a: Assignment, profileId: string) => S.plays.some(p => p.profileId === profileId && p.game === a.game && p.level >= a.level && p.createdAt >= a.createdAt);
-function assignmentsFor(profileId: string) {
-  const classId = S.profiles.find(p => p.id === profileId)?.classId;
-  if (!classId) return [];
-  return S.assignments.filter(a => a.classId === classId && !a.archived).map(a => ({ id: a.id, game: a.game, level: a.level, note: a.note, dueDate: a.dueDate, done: doneBy(a, profileId) }));
-}
 
 function lessonsFor(profileId: string) {
   const classId = S.profiles.find(p => p.id === profileId)?.classId;
@@ -151,7 +142,6 @@ function snapshot(profileId: string, clientDay?: string) {
     playedToday: row?.lastPlayDate === today, badges: S.badges.get(profileId) ?? [], breakdown, totalPlays: plays.length,
     recent: plays.slice(-8).reverse().map(p => ({ game: p.game, correct: p.correct, total: p.total, xpEarned: p.xpEarned, createdAt: p.createdAt })),
     lastMood: moods[0]?.mood ?? null, lastMoodAt: moods[0]?.createdAt ?? null,
-    assignments: assignmentsFor(profileId),
     lessons: lessonsFor(profileId),
   };
 }
@@ -273,7 +263,7 @@ const H: Record<string, Handler> = {
   "auth.me": () => S.user,
   "auth.register": ({ email, name, accountType: type, language }) => {
     S.user = { id: "demo-parent", email, name: name ?? null, role: "user", loginMethod: "email", accountType: type ?? "family", language: language ?? null, createdAt: new Date(), lastSignedIn: new Date() };
-    S.profiles = []; S.progress.clear(); S.plays = []; S.badges.clear(); S.moods = []; S.classes = []; S.assignments = []; S.lessons = []; S.shares = []; S.lessonResults = [];
+    S.profiles = []; S.progress.clear(); S.plays = []; S.badges.clear(); S.moods = []; S.classes = []; S.lessons = []; S.shares = []; S.lessonResults = [];
     if (S.user.accountType === "school") seedSchool(language ?? "en"); else seed();
     return S.user;
   },
@@ -362,7 +352,7 @@ const H: Record<string, Handler> = {
         const sids = S.sessions.filter(s => s.profileId === k.id).map(s => s.id);
         return { profileId: k.id, childName: k.childName, ageGroup: k.ageGroup, xp: row?.xp ?? 0, streakDays: row?.streakDays ?? 0, lastPlayDate: row?.lastPlayDate ?? null, plays, lastPlayedAt: last, flaggedMessages: S.messages.filter(m => sids.includes(m.sessionId) && m.role === "user" && m.flagged !== "safe").length, flaggedMoods: 0, lastMood: null, assignmentsDone: 0 };
       });
-      const ov = buildClassOverview(aggregates, S.assignments.filter(a => a.classId === c.id && !a.archived).length, today, now);
+      const ov = buildClassOverview(aggregates, today, now);
       const all = aggregates.flatMap(a => Object.values(a.plays));
       return { id: c.id, name: c.name, grade: c.grade, students: kids.length, activeThisWeek: ov.summary.activeThisWeek, plays: ov.summary.totalPlays, correct: all.reduce((n, p) => n + (p?.correct ?? 0), 0), asked: all.reduce((n, p) => n + (p?.total ?? 0), 0), needAttention: ov.summary.attentionCount };
     });
@@ -376,13 +366,13 @@ const H: Record<string, Handler> = {
     requireParent(); requireSchool(); const p = profile(profileId); if (!p.classId) throw new DemoError("BAD_REQUEST", "Add this student to a class first.");
     const row = S.progress.get(p.id); const plays = S.plays.filter(x => x.profileId === p.id); const c = S.classes.find(x => x.id === p.classId);
     const byGame = (["math", "spelling", "quiz", "memory", "patterns"] as GameId[]).map(game => { const g = plays.filter(x => x.game === game); return { game, plays: g.length, answers: g.reduce((n, x) => n + x.total, 0), correct: g.reduce((n, x) => n + x.correct, 0) }; }).filter(g => g.answers > 0);
-    const right = plays.reduce((n, x) => n + x.correct, 0), asked = plays.reduce((n, x) => n + x.total, 0); const acts = assignmentsFor(p.id);
+    const right = plays.reduce((n, x) => n + x.correct, 0), asked = plays.reduce((n, x) => n + x.total, 0);
     return {
       name: p.childName, className: c?.name ?? "", grade: c?.grade ?? null, level: levelFromXp(row?.xp ?? 0), xp: row?.xp ?? 0, streakDays: row?.streakDays ?? 0, longestStreak: row?.longestStreak ?? 0,
       totalPlays: plays.length, accuracyPercent: asked > 0 ? Math.round((right / asked) * 100) : null,
       byGame: byGame.map(g => ({ game: g.game, plays: g.plays, answers: g.answers, accuracyPercent: Math.round((g.correct / g.answers) * 100) })),
       lessons: lessonsFor(p.id).map((l: any) => ({ title: l.title, subject: l.subject, correct: l.result?.correct ?? null, total: l.result?.total ?? null })),
-      activities: { done: acts.filter((a: any) => a.done).length, total: acts.length }, badges: (S.badges.get(p.id) ?? []).length,
+      badges: (S.badges.get(p.id) ?? []).length,
     };
   },
   "safety.inbox": () => {
@@ -409,12 +399,11 @@ const H: Record<string, Handler> = {
     S.profiles.forEach(p => { if (p.classId === classId) p.classId = null; });
     const sids = S.shares.filter(x => x.classId === classId).map(x => x.id);
     S.lessonResults = S.lessonResults.filter(r => !sids.includes(r.shareId)); S.shares = S.shares.filter(x => x.classId !== classId);
-    S.assignments = S.assignments.filter(a => a.classId !== classId); S.classes = S.classes.filter(x => x.id !== classId);
+    S.classes = S.classes.filter(x => x.id !== classId);
     log("class_deleted", c.name); return { success: true };
   },
   "classes.overview": ({ classId, localDay }) => {
     requireParent(); requireSchool(); const c = klass(classId);
-    const open = S.assignments.filter(a => a.classId === classId && !a.archived);
     const aggregates: StudentAggregate[] = S.profiles.filter(p => p.classId === classId).map(p => {
       const row = S.progress.get(p.id);
       const plays: StudentAggregate["plays"] = {};
@@ -429,10 +418,10 @@ const H: Record<string, Handler> = {
       return {
         profileId: p.id, childName: p.childName, ageGroup: p.ageGroup, xp: row?.xp ?? 0, streakDays: row?.streakDays ?? 0, lastPlayDate: row?.lastPlayDate ?? null,
         plays, lastPlayedAt: last, flaggedMessages: S.messages.filter(m => sids.includes(m.sessionId) && m.role === "user" && m.flagged !== "safe").length,
-        flaggedMoods: moods.filter(m => m.flagged !== "safe").length, lastMood: moods[0]?.mood ?? null, assignmentsDone: open.filter(a => doneBy(a, p.id)).length,
+        flaggedMoods: moods.filter(m => m.flagged !== "safe").length, lastMood: moods[0]?.mood ?? null,
       };
     });
-    return { class: { id: c.id, name: c.name, grade: c.grade }, ...buildClassOverview(aggregates, open.length, resolvePlayDay(localDay, new Date())) };
+    return { class: { id: c.id, name: c.name, grade: c.grade }, ...buildClassOverview(aggregates, resolvePlayDay(localDay, new Date())) };
   },
   "lessons.list": () => { requireParent(); requireSchool(); return [...S.lessons].sort((a, b) => +b.updatedAt - +a.updatedAt).map(l => ({ id: l.id, title: l.title, subject: l.subject, grade: l.grade, language: l.language, topic: l.topic, durationMin: l.durationMin, createdAt: l.updatedAt, updatedAt: l.updatedAt, sharedWith: S.shares.filter(x => x.lessonId === l.id && !x.archived).length })); },
   "lessons.get": ({ lessonId }) => { requireParent(); requireSchool(); const l = lessonOf(lessonId); return { id: l.id, title: l.title, subject: l.subject, grade: l.grade, language: l.language, topic: l.topic, durationMin: l.durationMin, hasSource: !!l.sourceText, content: l.content, updatedAt: l.updatedAt }; },
@@ -525,20 +514,6 @@ const H: Record<string, Handler> = {
         : `Dear parents,\n\nThis week we learned to add fractions with the same denominator, and the class did well. At home you can practise by splitting food into equal parts and naming the fractions.\n\nWarm regards,\n${teacher}\n\n(Preview draft: the AI is not connected right now.)`));
     return { text: text.replace(/\{\{\s*student\s*\}\}/gi, name || (lang === "ar" ? "الطالب" : "your child")).replace(/\{\{\s*teacher\s*\}\}/gi, teacher) };
   },
-  "assistant.ask": async ({ messages, language }) => {
-    requireParent(); requireConsent(); requireSchool();
-    const last = String(messages[messages.length - 1]?.content ?? "");
-    const live = await ai(() => aiAssistant(messages, language));
-    if (live) return { reply: live };
-    return { reply: language === "ar"
-      ? `اقتراح تجريبي: ابدأ بمثال من حياة الطلاب اليومية، ثم اطلب منهم تفسيره بكلماتهم. (ردّ تجريبي: في التطبيق الحقيقي يجيب المساعد عن سؤالك «${last.slice(0, 60)}» بالذكاء الاصطناعي.)`
-      : `Preview suggestion: start with an example from the students' everyday life, then ask them to explain it in their own words. (Preview reply: in the live app the companion answers "${last.slice(0, 60)}" with the AI model.)` };
-  },
-  "studentLessons.boost": ({ profileId }) => {
-    requireConsent(); const p = profile(profileId); if (!p.classId) return { questions: [] };
-    const lessons = S.shares.filter(x => x.classId === p.classId && !x.archived).map(x => { const l = lessonOf(x.lessonId); return { title: l.title, content: l.content }; });
-    return { questions: buildBoost(lessons, 6) };
-  },
   "studentLessons.get": ({ profileId, shareId }) => {
     requireConsent(); const p = profile(profileId); const sh = shareOf(shareId);
     if (sh.archived || sh.classId !== p.classId) throw new DemoError("NOT_FOUND", "Lesson not found");
@@ -557,22 +532,6 @@ const H: Record<string, Handler> = {
     S.lessonResults.push({ shareId, profileId, answers, correct: g.correct, total: g.total });
     const out = recordPlay(profileId, "quiz", 1, g.correct, g.total, resolvePlayDay(localDay, new Date()));
     return { already: false, correct: g.correct, total: g.total, review, xpEarned: out.xpEarned, xp: out.xp, leveledUp: out.leveledUp, newBadges: named(out.newBadges) };
-  },
-  "assignments.list": ({ classId }) => {
-    requireParent(); requireSchool(); klass(classId);
-    const ids = S.profiles.filter(p => p.classId === classId).map(p => p.id);
-    return S.assignments.filter(a => a.classId === classId && !a.archived).map(a => ({ id: a.id, game: a.game, level: a.level, note: a.note, dueDate: a.dueDate, createdAt: a.createdAt, doneCount: ids.filter(id => doneBy(a, id)).length, studentCount: ids.length }));
-  },
-  "assignments.create": ({ classId, game, level, note, dueDate }) => {
-    requireParent(); requireConsent(); requireSchool(); klass(classId);
-    if (note && screenText(note).level !== "safe") throw new DemoError("BAD_REQUEST", "Please remove contact details or unsuitable words from the note.");
-    if (S.assignments.filter(a => a.classId === classId && !a.archived).length >= 10) throw new DemoError("BAD_REQUEST", "A class can have up to 10 open activities. Archive one first.");
-    S.assignments.push({ id: uid(), classId, game, level, note: note ?? null, dueDate: dueDate ?? null, createdAt: new Date(), archived: false });
-    log("assignment_created", `${klass(classId).name}: ${game} L${level}`); return { id: S.assignments[S.assignments.length - 1].id };
-  },
-  "assignments.archive": ({ assignmentId }) => {
-    requireParent(); requireSchool(); const a = S.assignments.find(x => x.id === assignmentId);
-    if (!a) throw new DemoError("NOT_FOUND", "Activity not found"); a.archived = true; return { success: true };
   },
   "profiles.update": ({ profileId, ...rest }) => { requireParent(); requireConsent(); Object.assign(profile(profileId), Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))); return { success: true }; },
   "profiles.delete": ({ profileId }) => {
@@ -663,16 +622,6 @@ const H: Record<string, Handler> = {
     return { text: text.slice(0, MAX_SOURCE_CHARS), truncated: text.length > MAX_SOURCE_CHARS };
   },
 
-  "creative.generateStory": async ({ prompt, language }) => {
-    requireConsent();
-    if (screenText(prompt, language ?? "en").level !== "safe") throw new DemoError("BAD_REQUEST", language === "ar" ? safeFallbackReply("ar") : "That's not something I can write about. Let's try a different idea!");
-    const live = await ai(() => aiStory(prompt, language ?? "en"));
-    if (live) return { content: live };
-    if (language === "ar") return { content: `كان يا ما كان، ${prompt}.\n\nفي صباح مشرق حدث شيء مفاجئ. ظهرت مشكلة صغيرة تحتاج إلى حل ذكي ولطيف. فأخذ بطلنا نفَساً عميقاً وابتسم وقرّر أن يحاول.\n\nوفي الطريق انضم إليه أصدقاء جدد، وعملوا معاً حتى وجدوا الحل. وتعلّم الجميع أن الفضول والشجاعة يجعلان العالم أجمل.\n\nوانتهت الحكاية.\n\n(قصة تجريبية: في التطبيق الحقيقي يكتب الذكاء الاصطناعي قصة جديدة في كل مرة.)` };
-    return { content: `Once upon a time, there was ${prompt}.\n\nOne bright morning, something surprising happened. A small problem appeared, and it needed a clever, kind answer. With a deep breath and a big smile, our hero decided to try.\n\nAlong the way, new friends joined the adventure. Together they worked it out, and everyone learned that being curious and brave makes the world a little bit brighter.\n\nThe end.\n\n(Preview story: in the live app the AI writes a new story every time.)` };
-  },
-  "creative.generateIllustration": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Could not create the picture right now."); },
-  "creative.generateAvatar": () => { requireConsent(); throw new DemoError("INTERNAL_SERVER_ERROR", "Pictures need the live app."); },
   "homework.analyzeHomework": async ({ language, imageData, subject }) => {
     requireConsent();
     const live = await ai(() => aiHomework({ imageBase64: imageData, subject, language: language ?? "en" }));
@@ -682,31 +631,6 @@ const H: Record<string, Handler> = {
   },
   "homework.getHomeworkHistory": () => [],
 
-  "pet.getMyPet": () => { requireUser(); return S.pet; },
-  "pet.createPet": ({ type, name }) => { requireConsent(); S.pet = { id: uid(), name, type, level: 1, experience: 0, happiness: 100, hunger: 0, evolution: "baby" }; return { success: true }; },
-  "pet.feedPet": () => { if (!S.pet) return { success: false }; S.pet.hunger = Math.max(0, S.pet.hunger - 30); S.pet.happiness = Math.min(100, S.pet.happiness + 10); return { success: true }; },
-  "pet.playWithPet": () => {
-    if (!S.pet) return { success: false };
-    S.pet.experience += 20; S.pet.level = Math.floor(S.pet.experience / 100) + 1;
-    S.pet.evolution = S.pet.level >= 10 ? "adult" : S.pet.level >= 5 ? "teen" : S.pet.level >= 2 ? "child" : "baby";
-    S.pet.happiness = Math.min(100, S.pet.happiness + 15); S.pet.hunger = Math.min(100, S.pet.hunger + 5); return { success: true };
-  },
-
-  "reports.getLatestReport": () => S.report,
-  "reports.generateReport": ({ language } = {} as any) => {
-    requireConsent();
-    if (language === "ar") { S.report = { id: uid(), childName: S.profiles[0]?.childName ?? "طالب", totalMessages: S.messages.length, totalSessions: S.sessions.length, strengths: "يطرح أسئلة فضولية عن العلوم والحيوانات. (نص تجريبي.)", weaknesses: "يمكنه استكشاف التاريخ والجغرافيا أكثر.", recommendations: "جرّبوا موضوعاً جديداً كل أسبوع واطرحوا سؤال متابعة." }; return S.report; }
-    S.report = { id: uid(), childName: S.profiles[0]?.childName ?? "Student", totalMessages: S.messages.length, totalSessions: S.sessions.length, strengths: "Asks curious questions about science and animals. (Preview text.)", weaknesses: "Could explore more about history and geography.", recommendations: "Try a new topic each week and ask a follow-up question." };
-    return S.report;
-  },
-  "summaries.getLatest": () => S.summary,
-  "summaries.generate": ({ language } = {} as any) => {
-    requireConsent();
-    const end = new Date();
-    if (language === "ar") { S.summary = { id: uid(), weekStart: new Date(+end - 7 * dayMs), weekEnd: end, totalMessages: S.messages.length, totalSessions: S.sessions.length, topicsCovered: "الفضاء والحيوانات والعلوم اليومية. (نص تجريبي.)", strengths: "فضولي ويواصل طرح أسئلة المتابعة.", areasToImprove: "جرّب أسئلة أطول وأكثر تفصيلاً.", recommendations: "اقرؤوا كتاباً علمياً معاً في نهاية الأسبوع." }; return S.summary; }
-    S.summary = { id: uid(), weekStart: new Date(+end - 7 * dayMs), weekEnd: end, totalMessages: S.messages.length, totalSessions: S.sessions.length, topicsCovered: "Space, animals and everyday science. (Preview text.)", strengths: "Curious and keeps asking follow-up questions.", areasToImprove: "Try longer, more detailed questions.", recommendations: "Explore a science book together this weekend." };
-    return S.summary;
-  },
   "account.auditLog": () => { requireParent(); return S.audit; },
   "account.delete": () => { S = fresh(); seed(); return { success: true }; },
 };
@@ -737,15 +661,14 @@ function seedSchool(lang: Lang) {
   });
   const play = (i: number, game: GameId, correct: number, total: number, daysAgo: number) => recordPlay(`p-s${i}`, game, 1, correct, total, isoLocal(d(daysAgo)), d(daysAgo));
   play(0, "math", 9, 10, 0); play(0, "quiz", 7, 8, 1); play(0, "spelling", 8, 8, 2);
-  play(1, "math", 6, 10, 1); play(1, "patterns", 5, 8, 3);
-  play(2, "quiz", 8, 8, 0); play(2, "memory", 6, 6, 1); play(2, "math", 10, 10, 2);
-  play(3, "math", 3, 10, 2); play(3, "math", 4, 10, 3); play(3, "patterns", 2, 8, 3);
+  play(1, "math", 6, 10, 1); play(1, "quiz", 5, 8, 3);
+  play(2, "quiz", 8, 8, 0); play(2, "spelling", 6, 6, 1); play(2, "math", 10, 10, 2);
+  play(3, "math", 3, 10, 2); play(3, "math", 4, 10, 3); play(3, "quiz", 2, 8, 3);
   play(4, "spelling", 7, 8, 4); play(4, "quiz", 6, 8, 5);
   play(5, "math", 5, 10, 12);
-  play(6, "memory", 6, 6, 0); play(6, "patterns", 7, 8, 1);
+  play(6, "spelling", 6, 6, 0); play(6, "quiz", 7, 8, 1);
   S.moods.push({ profileId: "p-s3", mood: "sad", note: null, flagged: "safe", createdAt: d(2) });
   S.moods.push({ profileId: "p-s6", mood: "happy", note: null, flagged: "safe", createdAt: d(1) });
-  S.assignments.push({ id: "a-1", classId: cls.id, game: "math", level: 1, note: lang === "ar" ? "حاولوا أن تحصلوا على 8 من 10" : "Try to get 8 out of 10", dueDate: null, createdAt: d(3), archived: false });
   names.forEach((_, i) => award(`p-s${i}`));
   // Two flagged messages so the Safety inbox shows how it ranks them.
   const flaggedChat = (i: number, text: string, level: "review" | "blocked", daysAgo: number) => {

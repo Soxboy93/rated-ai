@@ -55,7 +55,7 @@ export default function LessonHelp({ shareId }: { shareId: string }) {
       {teachBack && <p className="k-note-good" style={{ padding: 10, borderRadius: 12 }}>🎤 {t("Explain the lesson to {name} in your own words. There are no wrong tries!", { name: guide.short })}</p>}
       {!teachBack && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {lines.length === 0 && starters.map(s => <button key={s} type="button" className="k-btn small light" onClick={() => void ask(s)}>{s}</button>)}
-        <button type="button" className="k-btn small" style={{ ["--c" as string]: "var(--c-memory)" }} onClick={() => { playSound("tap"); setTeachBack(true); }}>🧑‍🏫 {t("Teach it back to {name}", { name: guide.short })}</button>
+        <button type="button" className="k-btn small" style={{ ["--c" as string]: "var(--c-words)" }} onClick={() => { playSound("tap"); setTeachBack(true); }}>🧑‍🏫 {t("Teach it back to {name}", { name: guide.short })}</button>
       </div>}
       {error && <p role="alert" className="k-note-bad" style={{ padding: 8, borderRadius: 12 }}>{error}</p>}
       <form style={{ display: "flex", gap: 10 }} onSubmit={e => { e.preventDefault(); void ask(text); }}>

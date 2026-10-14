@@ -35,7 +35,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-teal-50 to-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-paper flex items-center justify-center p-4">
       <LanguageSwitch className="fixed top-3 end-3" />
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-3">
@@ -60,7 +60,7 @@ export default function AuthPage() {
                     role="radio"
                     aria-checked={accountType === id}
                     onClick={() => setAccountType(id)}
-                    className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${accountType === id ? "border-teal-600 bg-teal-50 text-teal-900" : "border-gray-200 text-gray-700"}`}
+                    className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${accountType === id ? "border-brand-500 bg-brand-50 text-brand-800" : "border-gray-200 text-gray-700"}`}
                   >
                     <span aria-hidden="true">{icon}</span> {label}
                   </button>
@@ -83,12 +83,12 @@ export default function AuthPage() {
               autoComplete={mode === "register" ? "new-password" : "current-password"}
             />
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-            <Button type="submit" disabled={busy} className="w-full bg-teal-700 hover:bg-teal-800">
+            <Button type="submit" disabled={busy} className="w-full">
               {busy ? t("Please wait…") : mode === "login" ? t("Sign in") : t("Create account")}
             </Button>
             <button
               type="button"
-              className="w-full text-sm text-teal-800 underline"
+              className="w-full text-sm text-brand-700 underline"
               onClick={() => {
                 setError("");
                 setMode(mode === "login" ? "register" : "login");

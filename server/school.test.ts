@@ -161,37 +161,6 @@ describe("students and roster import", () => {
   });
 });
 
-describe("assignments", () => {
-  it("creates an activity and screens the note students will read", async () => {
-    const { api } = await caller(teacher, { unlocked: true });
-    await api.assignments.create({ classId: "c1", game: "math", level: 2, note: "Practise times tables", dueDate: "2026-11-01" });
-    expect(store.createAssignment).toHaveBeenCalledWith(expect.objectContaining({ classId: "c1", game: "math", level: 2, dueDate: "2026-11-01" }));
-    await expect(api.assignments.create({ classId: "c1", game: "math", level: 1, note: "call me on 0791234567" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect(api.assignments.create({ classId: "c1", game: "chess" as any, level: 1 })).rejects.toThrow();
-  });
-
-  it("limits open activities per class", async () => {
-    store.listAssignments.mockResolvedValue(Array.from({ length: 10 }, (_, i) => ({ id: `a${i}` })));
-    await expect((await caller(teacher, { unlocked: true })).api.assignments.create({ classId: "c1", game: "quiz", level: 1 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-  });
-
-  it("a student sees their class's activities and whether they are done", async () => {
-    store.getProfile.mockResolvedValue({ id: "s1", userId: "t1", classId: "c1", childName: "Lina", ageGroup: "tweens" });
-    store.getChildProgress.mockResolvedValue({ xp: 0, streakDays: 0, longestStreak: 0, lastPlayDate: null });
-    store.listBadges.mockResolvedValue([]); store.getGameBreakdown.mockResolvedValue([]); store.getRecentPlays.mockResolvedValue([]); store.listMoodCheckins.mockResolvedValue([]);
-    store.listAssignments.mockResolvedValue([{ id: "a1", game: "math", level: 1, note: "Times tables", dueDate: null, createdAt: new Date() }]);
-    store.assignmentCompletions.mockResolvedValue(new Set(["s1"]));
-    const out = await (await caller(teacher)).api.progress.get({ profileId: "s1" });
-    expect(out.assignments).toEqual([{ id: "a1", game: "math", level: 1, note: "Times tables", dueDate: null, done: true }]);
-  });
-
-  it("archiving needs ownership", async () => {
-    store.getAssignment.mockResolvedValue({ id: "a1", userId: "someone-else" });
-    await expect((await caller(teacher, { unlocked: true })).api.assignments.archive({ assignmentId: "a1" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(store.archiveAssignment).not.toHaveBeenCalled();
-  });
-});
-
 describe("Arabic chat", () => {
   const session = { id: "s1", userId: "t1", profileId: "p1", language: "ar", characterId: "sage", ageGroup: "tweens" };
   beforeEach(() => { store.getChatSession.mockResolvedValue(session); });

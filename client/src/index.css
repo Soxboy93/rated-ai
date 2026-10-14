@@ -4,6 +4,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The brand scale: one confident indigo. Teacher, family and admin screens use these (bg-brand-600, text-brand-700 ...). */
+@theme {
+  --color-brand-50: #f5f4ff;
+  --color-brand-100: #ece9ff;
+  --color-brand-200: #d6d1ff;
+  --color-brand-300: #b8b0fb;
+  --color-brand-400: #9186f1;
+  --color-brand-500: #7567e6;
+  --color-brand-600: #5b4bdb;
+  --color-brand-700: #4535b9;
+  --color-brand-800: #35288f;
+  --color-brand-900: #271e68;
+  --color-paper: #fffbf3;
+  --color-ledge: #e8e1d2;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -44,39 +60,39 @@
 }
 
 :root {
-  --primary: var(--color-teal-700);
-  --primary-foreground: var(--color-teal-50);
-  --sidebar-primary: var(--color-teal-500);
-  --sidebar-primary-foreground: var(--color-teal-50);
-  --chart-1: var(--color-teal-300);
-  --chart-2: var(--color-teal-500);
+  --primary: var(--color-brand-600);
+  --primary-foreground: #ffffff;
+  --sidebar-primary: var(--color-brand-500);
+  --sidebar-primary-foreground: #ffffff;
+  --chart-1: var(--color-brand-300);
+  --chart-2: var(--color-brand-500);
   --chart-3: var(--color-blue-500);
   --chart-4: var(--color-pink-500);
   --chart-5: var(--color-indigo-500);
-  --radius: 1rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
+  --radius: 1.1rem;
+  --background: #fffbf3;
+  --foreground: #1f1b3b;
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
+  --card-foreground: #1f1b3b;
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
+  --popover-foreground: #1f1b3b;
   --secondary: oklch(0.98 0.001 286.375);
   --secondary-foreground: oklch(0.4 0.015 65);
   --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
+  --muted-foreground: #66628a;
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.141 0.005 285.823);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: var(--color-teal-600);
+  --border: #e8e1d2;
+  --input: #e8e1d2;
+  --ring: var(--color-brand-500);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.235 0.015 65);
   --sidebar-accent: oklch(0.967 0.001 286.375);
   --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
   --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: var(--color-teal-600);
+  --sidebar-ring: var(--color-brand-500);
 }
 
 .dark {

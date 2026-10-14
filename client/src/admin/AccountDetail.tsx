@@ -102,7 +102,7 @@ export default function AccountDetail({ userId, onBack, onOpenStudent }: { userI
             <ul className="grid gap-2 sm:grid-cols-2">{data.students.map(s => {
               const cls = data.classes.find(c => c.id === s.classId);
               return (
-                <li key={s.id}><button className="flex w-full items-center justify-between rounded border bg-white p-3 text-start text-sm hover:border-teal-500" onClick={() => onOpenStudent(s.id)}>
+                <li key={s.id}><button className="flex w-full items-center justify-between rounded border bg-white p-3 text-start text-sm hover:border-brand-400" onClick={() => onOpenStudent(s.id)}>
                   <span><b><bdi>{s.childName}</bdi></b>{cls && <span className="text-gray-600"> · <bdi>{cls.name}</bdi></span>}<span className="block text-xs text-gray-500">{t("{n} XP", { n: s.xp })}{s.lastPlayedAt ? ` · ${t("Last played")} ${fmtDate(s.lastPlayedAt)}` : ""}</span></span>
                   {s.flaggedMessages > 0 && <span className="rounded-full bg-amber-100 px-2 text-xs text-amber-900">{t("Flags: {n}", { n: s.flaggedMessages })}</span>}
                 </button></li>

@@ -116,7 +116,6 @@ export default function LettersTab() {
             <li>{t("Level {level}", { level: report.level })} · {t("{n} XP", { n: report.xp })} · {t("Badges: {n}", { n: report.badges })}</li>
             <li>{t("Practice rounds played")}: {report.totalPlays}{report.accuracyPercent !== null ? ` · ${t("Answers right (%)")}: ${report.accuracyPercent}` : ""}</li>
             <li>{t("Day streak")}: {report.streakDays} · {t("Longest streak: {n}", { n: report.longestStreak })}</li>
-            {report.activities.total > 0 && <li>{t("Activities done")}: {report.activities.done} / {report.activities.total}</li>}
           </ul>
           {report.byGame.length > 0 && (
             <table style={{ borderCollapse: "collapse", width: "100%" }}>

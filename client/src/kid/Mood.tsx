@@ -55,7 +55,7 @@ export default function Mood() {
   if (done && mood) {
     const m = MOOD_META[mood];
     return (
-      <KidShell title={t("How I Feel")} color="var(--c-mood)">
+      <KidShell title={t("How I Feel")} back={{ href: "/me", label: t("Me") }}>
         <div style={{ display: "grid", gap: 16, maxWidth: 640, margin: "0 auto" }}>
           <div className="k-card k-in" style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Avatar guide={guide} size={100} bob />
@@ -66,7 +66,7 @@ export default function Mood() {
           </div>
           {done.flagged && <p className="k-card k-note-warn">{t("Your grown-up can see this check-in so they can help.")}</p>}
           {["worried", "angry", "sad", "tired"].includes(mood) && !breathing && (
-            <button className="k-btn" style={{ ["--c" as string]: "var(--c-memory)" }} onClick={() => setBreathing(true)}>🫧 {t("Try a calm breathing break")}</button>
+            <button className="k-btn" style={{ ["--c" as string]: "var(--c-words)" }} onClick={() => setBreathing(true)}>🫧 {t("Try a calm breathing break")}</button>
           )}
           {breathing && <Breathing onDone={() => setBreathing(false)} />}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -79,7 +79,7 @@ export default function Mood() {
   }
 
   return (
-    <KidShell title={t("How I Feel")} color="var(--c-mood)">
+    <KidShell title={t("How I Feel")} back={{ href: "/me", label: t("Me") }}>
       <div style={{ display: "grid", gap: 20, maxWidth: 820, margin: "0 auto" }}>
         <div className="k-card" style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <Avatar guide={guide} size={100} bob />

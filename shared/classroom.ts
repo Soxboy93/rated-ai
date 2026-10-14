@@ -14,7 +14,6 @@ export type StudentAggregate = {
   flaggedMessages: number;
   flaggedMoods: number;
   lastMood: string | null;
-  assignmentsDone: number;
 };
 
 export type StudentRow = {
@@ -32,7 +31,6 @@ export type StudentRow = {
   flaggedMessages: number;
   flaggedMoods: number;
   lastMood: string | null;
-  assignmentsDone: number;
   /** Why a teacher might want to check in (empty when nothing stands out). */
   attention: Array<"inactive" | "low_accuracy" | "flagged">;
 };
@@ -45,14 +43,13 @@ export type ClassOverview = {
     totalPlays: number;
     accuracyByGame: Partial<Record<GameId, number>>;
     attentionCount: number;
-    assignmentCount: number;
   };
 };
 
 const dayMs = 86_400_000;
 export const MIN_ANSWERS_FOR_ACCURACY_FLAG = 20;
 
-export function buildClassOverview(aggregates: StudentAggregate[], assignmentCount: number, today: string, now = new Date()): ClassOverview {
+export function buildClassOverview(aggregates: StudentAggregate[], today: string, now = new Date()): ClassOverview {
   const students: StudentRow[] = aggregates.map(a => {
     const plays = Object.values(a.plays);
     const totalPlays = plays.reduce((n, p) => n + (p?.plays ?? 0), 0);
@@ -78,7 +75,6 @@ export function buildClassOverview(aggregates: StudentAggregate[], assignmentCou
       flaggedMessages: a.flaggedMessages,
       flaggedMoods: a.flaggedMoods,
       lastMood: a.lastMood,
-      assignmentsDone: a.assignmentsDone,
       attention,
     };
   });
@@ -98,7 +94,6 @@ export function buildClassOverview(aggregates: StudentAggregate[], assignmentCou
       totalPlays: students.reduce((n, s) => n + s.totalPlays, 0),
       accuracyByGame,
       attentionCount: students.filter(s => s.attention.length > 0).length,
-      assignmentCount,
     },
   };
 }

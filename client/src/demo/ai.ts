@@ -5,7 +5,7 @@
  */
 import { buildSystemPrompt, lessonHelpRule, normalizeSearch, searchSystemPrompt, searchText, type SearchResult } from "../../../server/prompts";
 import { insightsSystemPrompt, letterSystemPrompt, normalizeInsights, type Insights } from "../../../server/lessonPrompts";
-import { assistantSystemPrompt, generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "../../../server/lessonPrompts";
+import { generationSystemPrompt, generationUserPrompt, revisionSystemPrompt, revisionUserPrompt } from "../../../server/lessonPrompts";
 import { languageRule } from "../../../server/prompts";
 import { normalizeLesson, studentFacingText, type LessonContent } from "@shared/lesson";
 import type { Lang } from "@shared/jordan";
@@ -73,13 +73,6 @@ export async function aiChat(p: { characterId: string | null; ageGroup: string; 
   return screenText(out, p.language).level === "blocked" ? null : out;
 }
 
-export async function aiStory(prompt: string, language: Lang): Promise<string | null> {
-  const instr = "You are a creative children's story writer. Write engaging, age-appropriate stories that are fun, educational, and inspire imagination. Never include violence, scary or adult content. Keep stories between 200-400 words. " + languageRule(language);
-  const out = await ask(`${instr}\n\nWrite a creative children's story about: ${prompt}`, { modelTier: "default" });
-  if (!out) return null;
-  return screenText(out, language).level === "blocked" ? null : out;
-}
-
 export type Solution = { question: string; steps: string[]; answer: string; explanation: string; subject: string; difficulty: string };
 
 export async function aiHomework(p: { imageBase64: string; subject?: string; language: Lang }): Promise<Solution | null> {
@@ -126,10 +119,6 @@ export async function aiLessonRevise(content: LessonContent, instruction: string
   const out = await ask(`${revisionSystemPrompt(language)}\n\n${revisionUserPrompt(content, instruction)}`, { modelTier: "complex" });
   if (!out) return null;
   try { return parseLesson(jsonish(out)); } catch (e) { if (e instanceof AiRefused) throw e; return null; }
-}
-
-export async function aiAssistant(messages: Turn[], language: Lang): Promise<string | null> {
-  return ask(withInstructions(assistantSystemPrompt(language), messages.slice(-12)), { modelTier: "default" });
 }
 
 export async function aiSearch(query: string, ageGroup: string, language: Lang): Promise<SearchResult | null> {

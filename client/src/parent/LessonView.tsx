@@ -12,7 +12,6 @@ import { gradeLabel } from "./grades";
 import { selectClass } from "./FamilyPanel";
 import { SUBJECT_LABEL } from "./LessonsTab";
 import TeachMode from "./TeachMode";
-import CompanionChat from "./CompanionChat";
 
 type Lesson = { id: string; title: string; subject: string; grade: number; language: Lang; topic: string; durationMin: number; hasSource: boolean; content: LessonContent };
 
@@ -171,7 +170,7 @@ function Body({ c }: { c: LessonContent }) {
             {c.quiz.map((q, i) => (
               <li key={i} className="rounded-lg border p-3">
                 <p className="font-medium">{i + 1}. <Bidi>{q.q}</Bidi></p>
-                <ul className="mt-1 space-y-0.5">{q.options.map((o, k) => <li key={k} className={k === q.answer ? "font-semibold text-teal-800" : ""}>{["A", "B", "C", "D"][k]}. <Bidi>{o}</Bidi>{k === q.answer ? " ✓" : ""}</li>)}</ul>
+                <ul className="mt-1 space-y-0.5">{q.options.map((o, k) => <li key={k} className={k === q.answer ? "font-semibold text-brand-700" : ""}>{["A", "B", "C", "D"][k]}. <Bidi>{o}</Bidi>{k === q.answer ? " ✓" : ""}</li>)}</ul>
                 {q.explanation && <p className="mt-1 text-gray-600">💡 {q.explanation}</p>}
               </li>
             ))}
@@ -221,7 +220,7 @@ function Insights({ shareId }: { shareId: string }) {
   const run = trpc.lessons.insights.useMutation();
   const d = run.data;
   return (
-    <div className="space-y-3 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm">
+    <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-3">
         <Button size="sm" onClick={() => run.mutate({ shareId })} disabled={run.isPending}>{run.isPending ? t("Reading the results…") : `💡 ${t("What should I re-teach?")}`}</Button>
         <span className="text-xs text-gray-600">{t("The companion sees the questions and how many students picked each answer, never a student's name.")}</span>
@@ -431,7 +430,7 @@ export default function LessonView({ lessonId, onBack }: { lessonId: string; onB
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              {REVISE_IDEAS.map(r => <button key={r} type="button" className="rounded-full border px-3 py-1 text-sm hover:bg-teal-50" onClick={() => setInstruction(t(r))}>{t(r)}</button>)}
+              {REVISE_IDEAS.map(r => <button key={r} type="button" className="rounded-full border px-3 py-1 text-sm hover:bg-brand-50" onClick={() => setInstruction(t(r))}>{t(r)}</button>)}
             </div>
             <form className="flex gap-2" onSubmit={e => { e.preventDefault(); revise.mutate({ lessonId, instruction }); }}>
               <Input value={instruction} maxLength={500} aria-label={t("What should change?")} placeholder={t("What should change?")} onChange={e => setInstruction(e.target.value)} />
@@ -443,7 +442,6 @@ export default function LessonView({ lessonId, onBack }: { lessonId: string; onB
       )}
 
       {!editing && <div className="no-print"><SharePanel lessonId={lessonId} /></div>}
-      {!editing && <div className="no-print"><CompanionChat lessonId={lessonId} title={t("Ask about this lesson")} /></div>}
       {printMode && <PrintSheet lesson={lesson} mode={printMode} />}
     </div>
   );

@@ -22,7 +22,6 @@ const TASKS: Record<LLMTask, { model: () => string; effort: "low" | "medium" | "
   lesson: { model: () => ENV.claudeModels.lesson, effort: "high", minTokens: 16000 },
   assistant: { model: () => ENV.claudeModels.assistant, effort: "medium", minTokens: 4000 },
   vision: { model: () => ENV.claudeModels.vision, effort: "medium", minTokens: 4000 },
-  summary: { model: () => ENV.claudeModels.summary, effort: "low", minTokens: 3000 },
   chat: { model: () => ENV.claudeModels.chat, effort: "low", minTokens: 3000 },
 };
 

@@ -20,7 +20,7 @@ export default function ConsentPage({ contactEmail, accountType, version }: { co
   const text = consentFor(accountType, lang);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-teal-50 to-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-paper flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
@@ -62,7 +62,7 @@ export default function ConsentPage({ contactEmail, accountType, version }: { co
             <Button
               disabled={!agreed || grant.isPending}
               onClick={() => grant.mutate({ version, language: lang, confirmParent: true })}
-              className="bg-teal-700 hover:bg-teal-800"
+             
             >
               {grant.isPending ? t("Saving…") : t("I agree and continue")}
             </Button>

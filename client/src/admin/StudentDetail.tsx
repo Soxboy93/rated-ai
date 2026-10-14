@@ -21,7 +21,7 @@ export default function StudentDetail({ profileId, onBack, onOpenAccount }: { pr
           <CardTitle><bdi>{profile.childName}</bdi></CardTitle>
           <CardDescription>
             {profile.className ? <><bdi>{profile.className}</bdi> · </> : null}
-            {t("Account")}: <button className="text-teal-800 underline" onClick={() => onOpenAccount(owner.id)}><bdi>{owner.email}</bdi></button>
+            {t("Account")}: <button className="text-brand-700 underline" onClick={() => onOpenAccount(owner.id)}><bdi>{owner.email}</bdi></button>
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-4">
@@ -54,7 +54,7 @@ export default function StudentDetail({ profileId, onBack, onOpenAccount }: { pr
                 <div key={s.id} className="space-y-1 rounded border p-3">
                   <p className="text-xs text-gray-500">{s.createdAt ? fmtDateTime(s.createdAt) : ""}</p>
                   {s.messages.map(m => (
-                    <p key={m.id} className={`rounded p-2 text-sm ${m.role === "user" ? "bg-teal-50" : "bg-blue-50"} ${m.flagged && m.flagged !== "safe" ? "ring-1 ring-amber-500" : ""}`} dir="auto">
+                    <p key={m.id} className={`rounded p-2 text-sm ${m.role === "user" ? "bg-brand-50" : "bg-blue-50"} ${m.flagged && m.flagged !== "safe" ? "ring-1 ring-amber-500" : ""}`} dir="auto">
                       <b>{m.role === "user" ? t("Student") : t("AI")}:</b> <bdi>{m.content}</bdi>{m.flagged && m.flagged !== "safe" ? ` · ${m.flagged}` : ""}
                     </p>
                   ))}

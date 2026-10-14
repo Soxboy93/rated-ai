@@ -198,15 +198,3 @@ describe("class results for the teacher", () => {
     await expect((await caller(other)).lessons.results({ shareId: "s1" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
-
-describe("teacher assistant chat", () => {
-  it("answers, stores nothing, and only adds lesson context for the teacher's own lesson", async () => {
-    llm.invokeLLM.mockResolvedValue({ choices: [{ message: { content: "Try a pizza analogy." } }] });
-    const api = await caller();
-    const out = await api.assistant.ask({ messages: [{ role: "user", content: "How do I explain halves?" }], language: "en", lessonId: "l1" });
-    expect(out.reply).toBe("Try a pizza analogy.");
-    expect(llm.invokeLLM.mock.calls[0][0].messages[0].content).toContain("Fractions");
-    await expect(api.assistant.ask({ messages: [{ role: "assistant", content: "Hi" }], language: "en" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect((await caller(other)).assistant.ask({ messages: [{ role: "user", content: "x y" }], language: "en", lessonId: "l1" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-  });
-});

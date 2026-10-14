@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { GAME_IDS } from "@shared/gamification";
-import { GAME_META } from "@/kid/guides";
 import { MOOD_META } from "@/kid/guides";
 import { localDay } from "@/kid/ChildContext";
 import { t, T, fmtDate } from "@/i18n";
@@ -41,12 +39,11 @@ export default function ClassTab() {
   const exportCsv = () => {
     if (!data) return;
     if (import.meta.env.VITE_DEMO) { setNote(t("In the live app this downloads a spreadsheet (CSV) of this table.")); return; }
-    const head = [t("Student"), t("Level"), t("XP"), t("Day streak"), t("Games played"), t("Answers right (%)"), t("Last played"), t("Activities done"), t("Needs a check-in")];
+    const head = [t("Student"), t("Level"), t("XP"), t("Day streak"), t("Games played"), t("Answers right (%)"), t("Last played"), t("Needs a check-in")];
     const rows = data.students.map(s => [
       s.childName, s.level, s.xp, s.streakDays, s.totalPlays,
       s.accuracy === null ? "" : Math.round(s.accuracy * 100),
       s.lastPlayedAt ? new Date(s.lastPlayedAt).toISOString().slice(0, 10) : "",
-      s.assignmentsDone,
       s.attention.map(a => t(ATTENTION[a])).join("; "),
     ]);
     const csv = "﻿" + [head, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
@@ -75,7 +72,7 @@ export default function ClassTab() {
         <Card><CardContent className="py-8 text-center text-gray-600">{t("This class has no students yet. Add them in the \"Classes and students\" tab.")}</CardContent></Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {([
               [T("Students"), data.summary.studentCount],
               [T("Active this week"), `${data.summary.activeThisWeek} / ${data.summary.studentCount}`],
@@ -87,31 +84,12 @@ export default function ClassTab() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>{t("Answers right, by game")}</CardTitle>
-              <CardDescription>{t("Across the whole class. Practice results from the games, not school grades.")}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {GAME_IDS.map(id => {
-                const acc = data.summary.accuracyByGame[id];
-                const pct = acc === undefined ? 0 : Math.round(acc * 100);
-                return (
-                  <div key={id} className="rounded-lg border p-3">
-                    <div className="flex justify-between text-sm"><span>{GAME_META[id].icon} {GAME_META[id].name}</span><span className="text-gray-600">{acc === undefined ? t("Not played yet") : `${pct}%`}</span></div>
-                    <div className="mt-2 h-2 rounded bg-gray-100" role="progressbar" aria-label={t("{name} accuracy", { name: GAME_META[id].name })} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div className="h-2 rounded bg-teal-600" style={{ width: `${pct}%` }} /></div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          <Card>
             <CardHeader><CardTitle>{t("Students")}</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-start text-gray-600">
-                    {[T("Student"), T("Level"), T("Day streak"), T("Games played"), T("Answers right"), T("Last played"), T("Activities done"), T("Mood"), T("Check-in")].map(h => <th key={h} scope="col" className="py-2 pe-3 text-start font-medium">{t(h)}</th>)}
+                    {[T("Student"), T("Level"), T("Day streak"), T("Games played"), T("Answers right"), T("Last played"), T("Mood"), T("Check-in")].map(h => <th key={h} scope="col" className="py-2 pe-3 text-start font-medium">{t(h)}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -123,7 +101,6 @@ export default function ClassTab() {
                       <td className="pe-3">{s.totalPlays}</td>
                       <td className="pe-3">{s.accuracy === null ? "–" : `${Math.round(s.accuracy * 100)}%`}</td>
                       <td className="pe-3">{s.lastPlayedAt ? fmtDate(s.lastPlayedAt) : t("Never")}</td>
-                      <td className="pe-3">{s.assignmentsDone}{data.summary.assignmentCount ? ` / ${data.summary.assignmentCount}` : ""}</td>
                       <td className="pe-3">{s.lastMood ? `${MOOD_META[s.lastMood]?.emoji ?? ""} ${MOOD_META[s.lastMood]?.label ?? s.lastMood}` : "–"}</td>
                       <td>{s.attention.length ? s.attention.map(a => <span key={a} className="me-1 inline-block rounded-full border border-amber-400 bg-white px-2 py-0.5 text-xs text-amber-900">{t(ATTENTION[a])}</span>) : "✓"}</td>
                     </tr>

@@ -69,7 +69,7 @@ function Students({ onOpen }: { onOpen: (id: string) => void }) {
         </form>
         {q === null ? null : isLoading ? <p className="text-gray-600">{t("Loading…")}</p> : !data || data.length === 0 ? <p className="text-gray-600">{t("No students match.")}</p> : (
           <ul className="grid gap-2 sm:grid-cols-2">{data.map(s => (
-            <li key={s.id}><button className="w-full rounded border bg-white p-3 text-start text-sm hover:border-teal-500" onClick={() => onOpen(s.id)}>
+            <li key={s.id}><button className="w-full rounded border bg-white p-3 text-start text-sm hover:border-brand-400" onClick={() => onOpen(s.id)}>
               <b><bdi>{s.childName}</bdi></b>{s.className && <span className="text-gray-600"> · <bdi>{s.className}</bdi></span>}
               <span className="block text-xs text-gray-500"><bdi>{s.ownerEmail}</bdi> · {s.ownerType === "school" ? t("School account") : t("Family account")}</span>
             </button></li>

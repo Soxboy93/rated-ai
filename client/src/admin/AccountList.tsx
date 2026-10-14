@@ -46,7 +46,7 @@ export default function AccountList({ type, onOpen }: { type: "school" | "family
               <tbody>
                 {data.rows.map(r => (
                   <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50">
-                    <td className="px-2 py-2"><button className="text-start font-medium text-teal-800 underline-offset-2 hover:underline" onClick={() => onOpen(r.id)}><bdi>{r.email}</bdi></button>{r.name && <span className="block text-xs text-gray-500"><bdi>{r.name}</bdi></span>}</td>
+                    <td className="px-2 py-2"><button className="text-start font-medium text-brand-700 underline-offset-2 hover:underline" onClick={() => onOpen(r.id)}><bdi>{r.email}</bdi></button>{r.name && <span className="block text-xs text-gray-500"><bdi>{r.name}</bdi></span>}</td>
                     <td className="px-2 py-2"><StatusBadge suspended={!!r.suspendedAt} admin={r.role === "admin"} /></td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.createdAt ? fmtDate(r.createdAt) : "–"}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.lastSignedIn ? fmtDate(r.lastSignedIn) : "–"}</td>

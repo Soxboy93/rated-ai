@@ -251,11 +251,9 @@ describe("student progress report", () => {
     store.getChildProgress.mockResolvedValue({ xp: 275, streakDays: 3, longestStreak: 5 });
     store.getGameBreakdown.mockResolvedValue([{ game: "math", plays: 4, correct: 30, total: 40 }, { game: "quiz", plays: 1, correct: 0, total: 0 }]);
     store.listStudentLessons.mockResolvedValue([{ title: "Fractions", subject: "math", result: { correct: 2, total: 3 } }, { title: "Plants", subject: "science", result: null }]);
-    store.listAssignments.mockResolvedValue([{ id: "a1" }, { id: "a2" }]);
-    store.assignmentCompletions.mockResolvedValueOnce(new Set(["kid1"])).mockResolvedValueOnce(new Set());
     store.listBadges.mockResolvedValue([{ badgeId: "a" }]);
     const r = await (await caller()).classes.studentReport({ profileId: "kid1" });
-    expect(r).toMatchObject({ name: "Layla", className: "4A", totalPlays: 5, accuracyPercent: 75, streakDays: 3, longestStreak: 5, badges: 1, activities: { done: 1, total: 2 } });
+    expect(r).toMatchObject({ name: "Layla", className: "4A", totalPlays: 5, accuracyPercent: 75, streakDays: 3, longestStreak: 5, badges: 1 });
     expect(r.byGame).toEqual([{ game: "math", plays: 4, answers: 40, accuracyPercent: 75 }]);
     expect(r.lessons).toEqual([{ title: "Fractions", subject: "math", correct: 2, total: 3 }, { title: "Plants", subject: "science", correct: null, total: null }]);
     expect(JSON.stringify(r)).not.toMatch(/mood|flag/i);
@@ -278,21 +276,5 @@ describe("teach it back", () => {
     expect(JSON.stringify(llm.invokeLLM.mock.calls[1][0])).not.toContain("explaining the lesson back to you");
     await api.chat.sendMessage({ sessionId: "sess", message: "hi", mode: "teachback" });
     expect(JSON.stringify(llm.invokeLLM.mock.calls[2][0])).not.toContain("explaining the lesson back to you");
-  });
-});
-
-describe("daily boost", () => {
-  it("gives a student a mixed review from the lessons shared with their class, answers included", async () => {
-    store.listStudentLessons.mockResolvedValue([{ title: "Fractions", content: JSON.stringify(content) }]);
-    const out = await (await caller()).studentLessons.boost({ profileId: "kid1" });
-    expect(out.questions).toHaveLength(1); // the sample lesson has one practice question
-    expect(out.questions[0]).toMatchObject({ lessonTitle: "Fractions", answer: 1 });
-    expect(JSON.stringify(out)).not.toContain("SECRET-QUIZ-QUESTION"); // the graded quiz is never used
-  });
-  it("is empty for a student without a class, and refused for someone else's student", async () => {
-    store.getProfile.mockResolvedValue({ ...kid, classId: null });
-    expect((await (await caller()).studentLessons.boost({ profileId: "kid1" })).questions).toEqual([]);
-    store.getProfile.mockResolvedValue({ ...kid, userId: "someone-else" });
-    await expect((await caller()).studentLessons.boost({ profileId: "kid1" })).rejects.toThrow();
   });
 });

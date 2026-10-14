@@ -29,7 +29,7 @@ export default function PlayerPicker() {
   const shown = (profiles ?? []).filter(p => !activeClass || p.classId === activeClass);
 
   return (
-    <KidShell title={t("Who's playing?")} home>
+    <KidShell title={t("Who's playing?")} bare>
       <div style={{ display: "grid", gap: 22 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <Logo size={64} />

@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import * as schema from "../drizzle/schema";
 import { BADGES, earnedBadgeIds, levelFromXp, nextStreak, xpForPlay, type GameId, type ProgressStats } from "../shared/gamification";
 import type { StudentAggregate } from "../shared/classroom";
-import { InsertUser, users, accessibilitySettings, InsertAccessibilitySettings, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions, virtualPets, reportCards, smartMoments, progressMetrics, weeklySummaries, studyReminders, classrooms, curriculumStandards, peerChallenges, teachers } from "../drizzle/schema";
+import { InsertUser, users, accessibilitySettings, InsertAccessibilitySettings, chatSessions, InsertChatSession, chatMessages, InsertChatMessage, parentalSettings, InsertParentalSettings, homeworkSubmissions } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -195,213 +195,8 @@ export async function getUserHomeworkSubmissions(userId: string) {
 
 
 // Virtual Pets
-export async function createVirtualPet(pet: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(virtualPets).values(pet);
-  return pet;
-}
-
-export async function getUserPet(userId: string) {
-  const db = await getDb();
-  if (!db) return null;
-  const result = await db.select().from(virtualPets).where(eq(virtualPets.userId, userId)).limit(1);
-  return result.length > 0 ? result[0] : null;
-}
-
-export async function updateVirtualPet(petId: string, updates: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.update(virtualPets).set(updates).where(eq(virtualPets.id, petId));
-}
-
-
-
 // Report Cards
-export async function createReportCard(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(reportCards).values(data);
-  return data;
-}
-
-export async function getLatestReportCard(userId: string) {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const result = await db
-    .select()
-    .from(reportCards)
-    .where(eq(reportCards.userId, userId))
-    .orderBy(desc(reportCards.createdAt))
-    .limit(1);
-  
-  return result.length > 0 ? result[0] : null;
-}
-
 // Smart Moments
-export async function createSmartMoment(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(smartMoments).values(data);
-  return data;
-}
-
-export async function getSmartMoments(userId: string) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db
-    .select()
-    .from(smartMoments)
-    .where(eq(smartMoments.userId, userId))
-    .orderBy(desc(smartMoments.createdAt));
-}
-
-// Progress Metrics
-export async function createProgressMetric(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(progressMetrics).values(data);
-  return data;
-}
-
-export async function getProgressMetrics(userId: string, days: number = 30) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return db
-    .select()
-    .from(progressMetrics)
-    .where(eq(progressMetrics.userId, userId))
-    .orderBy(desc(progressMetrics.date));
-}
-
-
-
-// Weekly Summaries
-export async function createWeeklySummary(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(weeklySummaries).values(data);
-  return data;
-}
-
-export async function getLatestWeeklySummary(userId: string) {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const result = await db
-    .select()
-    .from(weeklySummaries)
-    .where(eq(weeklySummaries.userId, userId))
-    .orderBy(desc(weeklySummaries.createdAt))
-    .limit(1);
-  
-  return result.length > 0 ? result[0] : null;
-}
-
-// Study Reminders
-export async function createStudyReminder(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(studyReminders).values(data);
-  return data;
-}
-
-export async function getStudyReminder(userId: string) {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const result = await db
-    .select()
-    .from(studyReminders)
-    .where(eq(studyReminders.userId, userId))
-    .limit(1);
-  
-  return result.length > 0 ? result[0] : null;
-}
-
-export async function updateStudyStreak(userId: string, streak: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  await db
-    .update(studyReminders)
-    .set({ streak, lastStudyDate: new Date() })
-    .where(eq(studyReminders.userId, userId));
-}
-
-// Export table references for routers
-export { weeklySummaries, studyReminders };
-
-
-
-// Teacher & Classroom Management
-export async function createClassroom(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(classrooms).values(data);
-  return data;
-}
-
-export async function getClassroomsByTeacher(teacherId: string) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  const result = await db
-    .select()
-    .from(classrooms)
-    .where(eq(classrooms.teacherId, teacherId))
-    .orderBy(desc(classrooms.createdAt));
-  
-  return result;
-}
-
-// Curriculum Standards
-export async function addCurriculumStandard(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(curriculumStandards).values(data);
-  return data;
-}
-
-export async function getStandardsByMessage(messageId: string) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  const result = await db
-    .select()
-    .from(curriculumStandards)
-    .where(eq(curriculumStandards.messageId, messageId));
-  
-  return result;
-}
-
-// Peer Challenges
-export async function createPeerChallenge(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(peerChallenges).values(data);
-  return data;
-}
-
-export async function getPeerChallenges(userId: string) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  const result = await db
-    .select()
-    .from(peerChallenges)
-    .where(eq(peerChallenges.creatorId, userId))
-    .orderBy(desc(peerChallenges.createdAt));
-  
-  return result;
-}
-
-// Export table references
-export { classrooms, curriculumStandards, peerChallenges, teachers };
-
 
 
 // Accessibility Settings
@@ -545,7 +340,6 @@ export async function deleteProfileData(userId: string, profileId: string) {
       await tx.delete(chatMessages).where(inArray(chatMessages.sessionId, ids));
       await tx.delete(chatSessions).where(inArray(chatSessions.id, ids));
     }
-    await tx.delete(schema.learningProgress).where(eq(schema.learningProgress.profileId, profileId));
     await tx.delete(schema.childBadges).where(eq(schema.childBadges.profileId, profileId));
     await tx.delete(schema.gamePlays).where(eq(schema.gamePlays.profileId, profileId));
     await tx.delete(schema.moodCheckins).where(eq(schema.moodCheckins.profileId, profileId));
@@ -568,25 +362,16 @@ export async function deleteAllUserData(userId: string) {
       await tx.delete(chatMessages).where(inArray(chatMessages.sessionId, sessionIds));
     }
     const profiles = await tx.select({ id: schema.userProfiles.id }).from(schema.userProfiles).where(eq(schema.userProfiles.userId, userId));
-    if (profiles.length > 0) {
-      await tx.delete(schema.learningProgress).where(inArray(schema.learningProgress.profileId, profiles.map(p => p.id)));
-    }
     await tx.delete(chatSessions).where(eq(chatSessions.userId, userId));
     // Tables keyed by userId
     const byUserId = [
-      schema.userProfiles, schema.parentalSettings, schema.homeworkSubmissions, schema.virtualPets,
-      schema.reportCards, schema.weeklySummaries, schema.accessibilitySettings, schema.achievements,
-      schema.storyCreations, schema.moodEntries, schema.readingSessions, schema.learningStreaks,
-      schema.userQuests, schema.smartMoments, schema.progressMetrics, schema.studyReminders,
-      schema.collegePrepProgress, schema.challengeParticipants, schema.parentalConsents, schema.auditEvents,
-      schema.childProgress, schema.gamePlays, schema.childBadges, schema.moodCheckins, schema.schoolClasses, schema.classAssignments,
-      schema.lessons, schema.lessonShares, schema.lessonResults,
+      schema.userProfiles, schema.parentalSettings, schema.homeworkSubmissions, schema.accessibilitySettings,
+      schema.parentalConsents, schema.auditEvents, schema.childProgress, schema.gamePlays, schema.childBadges,
+      schema.moodCheckins, schema.schoolClasses, schema.lessons, schema.lessonShares, schema.lessonResults,
     ] as const;
     for (const table of byUserId) {
       await tx.delete(table).where(eq((table as any).userId, userId));
     }
-    await tx.delete(schema.peerChallenges).where(eq(schema.peerChallenges.creatorId, userId));
-    await tx.delete(schema.classrooms).where(eq(schema.classrooms.teacherId, userId));
     await tx.delete(users).where(eq(users.id, userId));
   });
 }
@@ -775,7 +560,6 @@ export async function deleteClass(userId: string, classId: string) {
   if (!db) throw new Error("Database not available");
   await db.transaction(async tx => {
     await tx.update(schema.userProfiles).set({ classId: null }).where(and(eq(schema.userProfiles.userId, userId), eq(schema.userProfiles.classId, classId)));
-    await tx.delete(schema.classAssignments).where(and(eq(schema.classAssignments.userId, userId), eq(schema.classAssignments.classId, classId)));
     const shares = await tx.select({ id: schema.lessonShares.id }).from(schema.lessonShares).where(and(eq(schema.lessonShares.userId, userId), eq(schema.lessonShares.classId, classId)));
     if (shares.length > 0) {
       await tx.delete(schema.lessonResults).where(inArray(schema.lessonResults.shareId, shares.map(x => x.id)));
@@ -798,32 +582,6 @@ export async function listClassProfiles(userId: string, classId: string) {
   return db.select().from(schema.userProfiles).where(and(eq(schema.userProfiles.userId, userId), eq(schema.userProfiles.classId, classId))).orderBy(schema.userProfiles.childName);
 }
 
-export async function listAssignments(userId: string, classId: string, includeArchived = false) {
-  const db = await getDb();
-  if (!db) return [];
-  const where = and(eq(schema.classAssignments.userId, userId), eq(schema.classAssignments.classId, classId), includeArchived ? undefined : isNull(schema.classAssignments.archivedAt));
-  return db.select().from(schema.classAssignments).where(where).orderBy(desc(schema.classAssignments.createdAt));
-}
-
-export async function getAssignment(id: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const rows = await db.select().from(schema.classAssignments).where(eq(schema.classAssignments.id, id)).limit(1);
-  return rows[0];
-}
-
-export async function createAssignment(data: typeof schema.classAssignments.$inferInsert) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.insert(schema.classAssignments).values({ ...data, createdAt: new Date() });
-}
-
-export async function archiveAssignment(id: string) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.update(schema.classAssignments).set({ archivedAt: new Date() }).where(eq(schema.classAssignments.id, id));
-}
-
 /** Profile ids that completed an assignment: played that game at the assigned level or higher after it was set. */
 export async function assignmentCompletions(assignment: { game: string; level: number; createdAt: Date | null }, profileIds: string[]) {
   const db = await getDb();
@@ -836,7 +594,7 @@ export async function assignmentCompletions(assignment: { game: string; level: n
 }
 
 /** Per-student numbers for a whole class in a handful of queries (not one per student). */
-export async function getStudentAggregates(profiles: Array<{ id: string; childName: string; ageGroup: string }>, assignments: Array<{ game: string; level: number; createdAt: Date | null }>): Promise<StudentAggregate[]> {
+export async function getStudentAggregates(profiles: Array<{ id: string; childName: string; ageGroup: string }>): Promise<StudentAggregate[]> {
   const db = await getDb();
   if (!db || profiles.length === 0) return [];
   const ids = profiles.map(p => p.id);
@@ -863,8 +621,6 @@ export async function getStudentAggregates(profiles: Array<{ id: string; childNa
     db.select().from(schema.moodCheckins).where(inArray(schema.moodCheckins.profileId, ids)).orderBy(desc(schema.moodCheckins.createdAt)),
   ]);
 
-  const doneSets = await Promise.all(assignments.map(a => assignmentCompletions(a, ids)));
-
   return profiles.map(p => {
     const pr = progress.find(r => r.profileId === p.id);
     const rows = plays.filter(r => r.profileId === p.id);
@@ -888,7 +644,6 @@ export async function getStudentAggregates(profiles: Array<{ id: string; childNa
       flaggedMessages: Number(flaggedChat.find(r => r.profileId === p.id)?.n ?? 0),
       flaggedMoods: moods.filter(m => m.flagged && m.flagged !== "safe").length,
       lastMood: moods[0]?.mood ?? null,
-      assignmentsDone: doneSets.filter(set => set.has(p.id)).length,
     };
   });
 }

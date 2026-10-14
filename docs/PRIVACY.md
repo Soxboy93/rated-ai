@@ -12,7 +12,7 @@ Status of this document: describes what the **software does today**. It is not l
 - **Export:** a child's profile and all their conversations as JSON.
 - **Delete a child:** removes the profile and all that child's conversations and messages.
 - **Withdraw consent:** chat and AI tools stop immediately; data is kept until the parent deletes it.
-- **Delete account:** removes the user and every row keyed to it (profiles, chats, messages, homework, reports, summaries, pet, settings, consent records, audit log). Verified against a real MariaDB run.
+- **Delete account:** removes the user and every row keyed to it (profiles, chats, messages, homework, settings, progress, lessons, consent records, audit log). Verified against a real MariaDB run.
 - An audit log of privacy actions (consent, profile changes, exports, PIN changes) is shown to the parent.
 
 ## Data inventory
@@ -26,7 +26,6 @@ Status of this document: describes what the **software does today**. It is not l
 | Teacher lesson plans (topic, notes, optional pasted textbook passage, AI-drafted content) | `lessons` | The teacher (own account); operator (database) | Yes: the request and any pasted passage go to the AI provider to write the lesson. Do not paste anything containing student data. |
 | Uploaded textbook page (photo or PDF) | Sent to the AI provider once to copy its text; the file itself is not stored, only the text the teacher keeps in the lesson | The teacher | Yes: the file goes to the AI provider |
 | Safe Search questions and answers | `chatSessions`, `chatMessages` (saved like chats, starting with 🔎) | Parent / teacher; operator | Safe questions go to the AI provider to write the answer; flagged ones do not |
-| Teacher companion chat | Not stored | Nobody (cleared when the page closes) | Yes: the messages go to the AI provider |
 | Shared lessons and students' quiz answers/scores | `lesson_shares`, `lesson_results` (answers, score, first attempt only) | The teacher of that class; the student sees their own score | No |
 | Administrator access (support) | Administrators can read any account's classes, students, progress and conversations; each look is logged to the administrator and to the account owner's audit log (`docs/ADMIN.md`) | A very small number of named staff; the account owner sees every access | No |
 | Parent PIN | `parentalSettings` (bcrypt hash) | Nobody | No |
@@ -49,6 +48,6 @@ School accounts use separate consent wording (English and Arabic, version `2026-
 - Legal review of the consent wording; a public privacy policy and terms page; a named privacy contact (`PRIVACY_CONTACT_EMAIL`).
 - Retention policy and automatic expiry (nothing is deleted automatically today), plus backup/log deletion procedures.
 - Verifiable parental consent method appropriate to your markets.
-- Per-child scoping of the other features (homework history, report cards, weekly summaries, pet are still per account).
+- Per-child scoping of homework history (still per account).
 - Email notifications of consent/PIN/deletion events; password reset; email verification.
 - A subprocessor list and a process for access/deletion requests that come by email.

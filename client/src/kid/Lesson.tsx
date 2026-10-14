@@ -26,10 +26,10 @@ export default function Lesson() {
   const [error, setError] = useState("");
   const startedAt = useRef(0);
 
-  if (q.isLoading) return <KidShell title={t("Lesson")} color="var(--c-homework)"><p className="k-muted">{t("Loading…")}</p></KidShell>;
+  if (q.isLoading) return <KidShell title={t("Lesson")} back={{ href: "/lessons", label: t("Lessons") }}><p className="k-muted">{t("Loading…")}</p></KidShell>;
   if (q.error || !q.data) {
     return (
-      <KidShell title={t("Lesson")} color="var(--c-homework)">
+      <KidShell title={t("Lesson")} back={{ href: "/lessons", label: t("Lessons") }}>
         <div className="k-card k-note-bad" role="alert">{t(q.error?.message ?? "Lesson not found")}</div>
         <div style={{ marginTop: 16 }}><Link href="/" className="k-btn">🏠 {t("Home")}</Link></div>
       </KidShell>
@@ -65,7 +65,7 @@ export default function Lesson() {
   /* ---------------------------------------------------------------- done */
   if (phase === "done" && out) {
     return (
-      <KidShell title={lesson.title} color="var(--c-homework)">
+      <KidShell title={lesson.title}>
         <div style={{ display: "grid", gap: 18, maxWidth: 760, margin: "0 auto" }}>
           <div className="k-card k-in" style={{ textAlign: "center", display: "grid", gap: 12, justifyItems: "center" }}>
             <Avatar guide={guide} size={84} bob />
@@ -97,28 +97,28 @@ export default function Lesson() {
   const startQuiz = () => { startedAt.current = Date.now(); setAnswers([]); setI(0); setPhase("quiz"); };
   if (phase === "learn") {
     return (
-      <KidShell title={lesson.title} color="var(--c-homework)">
+      <KidShell title={lesson.title}>
         <LearnCards cards={lesson.cards} summary={lesson.summary} guide={guide} d={d} onBack={() => setPhase("hub")} onDone={() => setPhase(lesson.practice.length ? "practice" : "hub")} />
       </KidShell>
     );
   }
   if (phase === "words") {
     return (
-      <KidShell title={lesson.title} color="var(--c-memory)">
+      <KidShell title={lesson.title}>
         <WordCards vocab={lesson.vocabulary} guide={guide} d={d} onBack={() => setPhase("hub")} onDone={() => setPhase("match")} />
       </KidShell>
     );
   }
   if (phase === "match") {
     return (
-      <KidShell title={lesson.title} color="var(--c-memory)">
+      <KidShell title={lesson.title}>
         <MatchGame vocab={lesson.vocabulary} guide={guide} d={d} onExit={() => setPhase("hub")} />
       </KidShell>
     );
   }
   if (phase === "practice") {
     return (
-      <KidShell title={lesson.title} color="var(--c-memory)">
+      <KidShell title={lesson.title}>
         <PracticeGame questions={lesson.practice} guide={guide} d={d} onExit={() => setPhase("hub")} onQuiz={lesson.result || total === 0 ? undefined : startQuiz} />
       </KidShell>
     );
@@ -128,10 +128,10 @@ export default function Lesson() {
   if (phase === "quiz") {
     const cur = lesson.quiz[i];
     return (
-      <KidShell title={lesson.title} color="var(--c-homework)">
+      <KidShell title={lesson.title}>
         <div style={{ display: "grid", gap: 16, maxWidth: 760, margin: "0 auto" }} dir={dir} lang={lesson.language}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-homework)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((i / total) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((i / total) * 100))}%` }} /></div>
+            <div className="k-bar" style={{ flex: 1, ["--c" as string]: "var(--c-lesson)" }} role="progressbar" aria-label={t("Round progress")} aria-valuenow={Math.round((i / total) * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(4, Math.round((i / total) * 100))}%` }} /></div>
             <span className="k-chip">{i + 1} / {total}</span>
           </div>
           <section className="k-card k-in" key={i} aria-live="polite"><h2 style={{ fontSize: "clamp(1.4rem, 5vw, 2rem)", overflowWrap: "anywhere" }}><Bidi>{cur.q}</Bidi></h2></section>
@@ -152,7 +152,7 @@ export default function Lesson() {
 
   /* ---------------------------------------------------------------- hub */
   return (
-    <KidShell title={lesson.title} color="var(--c-homework)">
+    <KidShell title={lesson.title} back={{ href: "/lessons", label: t("Lessons") }}>
       <div style={{ display: "grid", gap: 18, maxWidth: 760, margin: "0 auto" }}>
         <div className="k-card" style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <Avatar guide={guide} size={72} />
@@ -161,17 +161,17 @@ export default function Lesson() {
 
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           {lesson.cards.length + lesson.summary.length > 0 && (
-            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-homework)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("learn"); }}>
+            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-lesson)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("learn"); }}>
               <span className="icon" aria-hidden="true">🎴</span><span><span className="name" style={{ display: "block" }}>{t("Learn it with {name}", { name: guide.short })}</span><span className="sub">{t("Short cards, one idea each")}</span></span>
             </button>
           )}
           {lesson.vocabulary.length > 0 && (
-            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-patterns)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("words"); }}>
+            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-words)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("words"); }}>
               <span className="icon" aria-hidden="true">🔤</span><span><span className="name" style={{ display: "block" }}>{t("Word cards")}</span><span className="sub">{t("Flip them, then match them")}</span></span>
             </button>
           )}
           {lesson.practice.length > 0 && (
-            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-memory)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("practice"); }}>
+            <button type="button" className="k-tile" style={{ ["--c" as string]: "var(--c-words)", textAlign: "start" }} onClick={() => { playSound("tap"); setPhase("practice"); }}>
               <span className="icon" aria-hidden="true">🎮</span><span><span className="name" style={{ display: "block" }}>{t("Play the practice game")}</span><span className="sub">{t("Not marked. Play as much as you like")}</span></span>
             </button>
           )}
@@ -204,7 +204,7 @@ export default function Lesson() {
             <div><b>{t("You took the quiz.")}</b><p>{t("{a} out of {b} right", { a: lesson.result.correct, b: lesson.result.total })}</p></div>
           </div>
         ) : total > 0 ? (
-          <div><button type="button" className="k-btn" style={{ ["--c" as string]: "var(--c-homework)" }} onClick={startQuiz}>📝 {t("Take the quiz")}</button></div>
+          <div><button type="button" className="k-btn" style={{ ["--c" as string]: "var(--c-lesson)" }} onClick={startQuiz}>📝 {t("Take the quiz")}</button></div>
         ) : null}
         {child && <LessonHelp shareId={shareId} />}
       </div>

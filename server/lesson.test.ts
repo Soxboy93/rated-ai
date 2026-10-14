@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBoost, buildSlides, gradeQuiz, normalizeLesson, plannedMinutes, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
+import { buildSlides, gradeQuiz, normalizeLesson, plannedMinutes, studentFacingText, studentView, type LessonContent } from "@shared/lesson";
 
 const good = {
   objectives: ["Add fractions with the same denominator"],
@@ -96,40 +96,5 @@ describe("buildSlides", () => {
   it("skips empty sections", () => {
     const slides = buildSlides(normalizeLesson({ steps: [{ title: "Only", explanation: "x" }] }), { title: "T", subtitle: "" });
     expect(slides.map(s => s.kind)).toEqual(["title", "step"]);
-  });
-});
-
-describe("daily boost", () => {
-  const mk = (title: string, nPractice: number, words = 0) => ({
-    title,
-    content: normalizeLesson({
-      steps: [{ title: "s", explanation: "e", board: [], minutes: 5 }],
-      practice: Array.from({ length: nPractice }, (_, i) => ({ q: `${title} Q${i}`, options: ["a", "b", "c", "d"], answer: 1, explanation: "x" })),
-      vocabulary: Array.from({ length: words }, (_, i) => ({ term: `${title}-w${i}`, meaning: `${title} means ${i}` })),
-    }),
-  });
-  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-
-  it("mixes lessons, takes at most two from one lesson first, and never repeats a question", () => {
-    const out = buildBoost([mk("A", 6), mk("B", 6), mk("C", 6)], 6, rnd);
-    expect(out).toHaveLength(6);
-    for (const t of ["A", "B", "C"]) expect(out.filter(q => q.lessonTitle === t)).toHaveLength(2);
-    expect(new Set(out.map(q => q.q)).size).toBe(6);
-  });
-  it("fills up from one lesson when that is all there is, and returns nothing for no lessons", () => {
-    expect(buildBoost([mk("A", 8)], 6, rnd)).toHaveLength(6);
-    expect(buildBoost([], 6, rnd)).toEqual([]);
-    expect(buildBoost([mk("A", 0)], 6, rnd)).toEqual([]);
-  });
-  it("makes word-meaning questions with four distinct options and the right answer index", () => {
-    const out = buildBoost([mk("W", 0, 6)], 6, rnd);
-    expect(out).toHaveLength(6);
-    for (const q of out) {
-      expect(new Set(q.options).size).toBe(4);
-      expect(q.options[q.answer]).toBe(q.explanation.split(": ")[1]);
-    }
-  });
-  it("needs at least four words before it makes word questions (it needs wrong options)", () => {
-    expect(buildBoost([mk("W", 0, 3)], 6, rnd)).toEqual([]);
   });
 });

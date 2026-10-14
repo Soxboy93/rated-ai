@@ -130,7 +130,7 @@ export default function LessonsTab() {
             <ul className="grid gap-3 sm:grid-cols-2">
               {lessons.map(l => (
                 <li key={l.id}>
-                  <button type="button" onClick={() => setView({ kind: "lesson", id: l.id })} className="w-full rounded-xl border bg-white p-4 text-start shadow-sm transition hover:border-teal-500 hover:shadow">
+                  <button type="button" onClick={() => setView({ kind: "lesson", id: l.id })} className="w-full rounded-xl border bg-white p-4 text-start shadow-sm transition hover:border-brand-400 hover:shadow">
                     <p className="font-semibold"><bdi>{l.title}</bdi></p>
                     <p className="text-sm text-gray-600">{t(SUBJECT_LABEL[l.subject as LessonSubject] ?? "Other")} · {gradeLabel(l.grade)} · {t("{n} minutes", { n: l.durationMin })}</p>
                     <p className="mt-1 text-xs text-gray-500">{l.updatedAt ? fmtDate(l.updatedAt) : ""}{l.sharedWith ? ` · ${t("Classes it is shared with: {n}", { n: l.sharedWith })}` : ""}</p>

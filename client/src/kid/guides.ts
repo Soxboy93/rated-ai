@@ -55,8 +55,6 @@ export const GAME_META = {
   math: { get name() { return t("Number Ninjas"); }, icon: "🥷", color: "var(--c-math)", get blurb() { return t("Quick maths, big points"); } },
   spelling: { get name() { return t("Spelling Bee"); }, icon: "🐝", color: "var(--c-spelling)", get blurb() { return t("Listen, then spell it right"); } },
   quiz: { get name() { return t("Quiz Time"); }, icon: "🧠", color: "var(--c-quiz)", get blurb() { return t("Facts about our world"); } },
-  memory: { get name() { return t("Memory Match"); }, icon: "🃏", color: "var(--c-memory)", get blurb() { return t("Flip cards and find pairs"); } },
-  patterns: { get name() { return t("Pattern Pals"); }, icon: "🧩", color: "var(--c-patterns)", get blurb() { return t("What comes next?"); } },
 } as const;
 
 export const MOOD_META: Record<string, { label: string; emoji: string; color: string; reply: string }> = {

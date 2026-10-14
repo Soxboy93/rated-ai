@@ -56,7 +56,7 @@ export type ToolChoice =
   | ToolChoiceExplicit;
 
 /** What a call is for. Decides the model, the thinking effort and the output limit when Claude is the provider. */
-export type LLMTask = "chat" | "lesson" | "assistant" | "vision" | "summary";
+export type LLMTask = "chat" | "lesson" | "assistant" | "vision";
 
 export type InvokeParams = {
   task?: LLMTask;

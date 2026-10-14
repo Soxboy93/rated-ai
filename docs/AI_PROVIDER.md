@@ -11,7 +11,7 @@ Claude is what I could wire in and test end to end here, and it is a strong choi
 | Job | Default model | Why | Approx. price per 1M tokens (input / output) |
 |---|---|---|---|
 | Lesson drafts and rewrites | `claude-opus-5-5` | Long, structured, accuracy-sensitive output; a teacher waits a little for it | $4 / $20 |
-| Child chat, stories, homework photos, teacher companion chat, reports and summaries | `claude-sonnet-5-5` | Fast and capable enough; a child is waiting; supports image input | $2 / $10 |
+| Child chat, Safe Search, homework photos, parent notes and re-teach plans | `claude-sonnet-5-5` | Fast and capable enough; a child is waiting; supports image input | $2 / $10 |
 | Safety check of each child message | `claude-haiku-5-5` | Cheapest and quickest; classifies Arabic dialects and spellings that keyword lists miss | $0.10 / $0.50 |
 
 Override any of them with `CLAUDE_MODEL_LESSON`, `CLAUDE_MODEL_CHAT`, `CLAUDE_MODEL_ASSISTANT`, `CLAUDE_MODEL_VISION`, `CLAUDE_MODEL_SUMMARY`, `CLAUDE_MODEL_SAFETY`. `claude-fable-5-1` (about $10 / $50) is Anthropic's most capable model and can be set for lessons if the evaluation shows Opus is not good enough; it has stricter data-retention requirements (see your Anthropic agreement). Prices above are list prices when this was written; check Anthropic's pricing page.
@@ -43,7 +43,7 @@ Do not paste the key into a chat message, an issue, a commit or a screenshot. If
 
 ## Things this does not solve
 
-- **Story illustrations and avatars** need an image model; Claude does not generate images. They keep using the OpenAI-compatible `IMAGE_MODEL` settings (`LLM_API_URL` / `LLM_API_KEY`). With only a Claude key, those two buttons show "Could not create the picture right now."
+- **No image generation.** The product does not make pictures (stories and avatars were removed; see `docs/SCOPE.md`).
 - **Data protection.** Child chat text, lesson requests, pasted textbook passages and homework photos are sent to Anthropic's servers (outside Jordan). Whether that is acceptable under Jordan's Personal Data Protection Law, a school's own rules, and what Anthropic's agreement says about retention and training has **not** been reviewed by a lawyer. Do this before real students use it. See `docs/PRIVACY.md` and `docs/JORDAN_SCHOOLS.md`.
 - **Quality in Arabic classrooms is unproven** until the evaluation has been read by teachers.
 - **Cost control.** The app rate-limits requests per user, but set a monthly spend limit on the API key.

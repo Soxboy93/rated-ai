@@ -23,7 +23,7 @@ export default function GettingStarted({ go }: { go: Go }) {
   if (finished === steps.length) return null;
   const next = steps.find(s => !s.done)!;
   return (
-    <Card className="border-teal-300 bg-teal-50">
+    <Card className="border-brand-300 bg-brand-50">
       <CardHeader>
         <CardTitle>{t("Get started")} · {finished} / {steps.length}</CardTitle>
         <CardDescription>{t("Four small steps and your class is learning.")}</CardDescription>
@@ -32,7 +32,7 @@ export default function GettingStarted({ go }: { go: Go }) {
         <ol className="space-y-2">
           {steps.map(s => (
             <li key={s.label} className="flex items-start gap-3">
-              <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${s.done ? "border-teal-700 bg-teal-700 text-white" : "border-gray-400 bg-white"}`} aria-hidden="true">{s.done ? <Check className="h-4 w-4" /> : ""}</span>
+              <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${s.done ? "border-brand-600 bg-brand-600 text-white" : "border-gray-400 bg-white"}`} aria-hidden="true">{s.done ? <Check className="h-4 w-4" /> : ""}</span>
               <span><b className={s.done ? "text-gray-500 line-through" : ""}>{s.label}</b><span className="block text-sm text-gray-600">{s.hint}</span></span>
             </li>
           ))}

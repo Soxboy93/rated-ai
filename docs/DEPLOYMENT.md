@@ -34,7 +34,7 @@ On any Linux server with Docker (for example a Hostinger VPS) and the domain's D
 ```bash
 git clone https://github.com/Soxboy93/rated-ai && cd rated-ai
 git checkout claude/parent-auth-safety-provider-neutral   # until merged
-cp .env.example .env    # fill JWT_SECRET, ANTHROPIC_API_KEY (see docs/AI_PROVIDER.md), LLM_API_KEY (only for story pictures), DB_PASSWORD, DB_ROOT_PASSWORD
+cp .env.example .env    # fill JWT_SECRET, ANTHROPIC_API_KEY (see docs/AI_PROVIDER.md), DB_PASSWORD, DB_ROOT_PASSWORD
 docker compose up -d --build
 ```
 Caddy obtains the TLS certificate automatically once DNS resolves to the server and ports 80/443 are open. Migrations run before the app starts. This bundle has not been run in the authoring environment (the Docker client was present but no daemon, so images were not built; the compose file was only syntax-checked with `docker compose config`), so expect to debug the first start.
@@ -85,7 +85,7 @@ Do **not** use `docker-compose.yml` there (its Caddy service wants ports 80/443)
 
 ## 6. Known operational limits
 - Rate limiting is in-memory, per process. Run a single instance, or move `server/_core/rateLimit.ts` to a shared store (Redis) before scaling out.
-- Email delivery (weekly summaries, password reset, email verification) is not implemented. There is no password-reset flow yet.
+- Email delivery (password reset, email verification) is not implemented. There is no password-reset flow yet.
 - Daily time limits / allowed hours are stored but not enforced.
 - Moderation is keyword screening plus an optional provider moderation call; it is not a certified or complete safety system.
 - Image generation returns base64 `data:` URLs (no object storage). Generated pictures are not saved.

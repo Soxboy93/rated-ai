@@ -120,6 +120,13 @@
       "when": 1791904447974,
       "tag": "0016_admin_suspend",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1791975382471,
+      "tag": "0017_remove_unused_tables",
+      "breakpoints": true
     }
   ]
 }

@@ -61,12 +61,11 @@ beforeEach(() => {
 });
 
 describe("authentication required", () => {
-  it("rejects anonymous access to chat, homework, reports and the parent dashboard", async () => {
+  it("rejects anonymous access to chat, homework and the parent dashboard", async () => {
     const { api } = caller({ user: null });
     await expect(api.chat.getMessages({ sessionId: "s" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(api.chat.sendMessage({ sessionId: "s", message: "hi" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(api.homework.getHomeworkHistory()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await expect(api.reports.generateReport()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(api.parent.getActivityReport()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
@@ -225,24 +224,5 @@ describe("accounts", () => {
       code: "UNAUTHORIZED",
       message: "Incorrect email or password",
     });
-  });
-});
-
-describe("no fabricated AI output", () => {
-  it("fails (and stores nothing) when the model is unavailable for a report card", async () => {
-    store.getUserChatSessions.mockResolvedValue([{ id: "s1", childName: "Kid" }]);
-    store.getAllUserMessages.mockResolvedValue([{ role: "user", content: "fractions?", flagged: "safe" }]);
-    llm.invokeLLM.mockRejectedValue(new Error("provider down"));
-    await expect(caller().api.reports.generateReport()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
-    expect(store.createReportCard).not.toHaveBeenCalled();
-  });
-
-  it("creates an N/A report (no invented grades) when there is no activity", async () => {
-    store.getUserChatSessions.mockResolvedValue([]);
-    store.getAllUserMessages.mockResolvedValue([]);
-    store.createReportCard.mockImplementation(async (d: any) => d);
-    const report: any = await caller().api.reports.generateReport();
-    expect(report.overallGrade).toBe("N/A");
-    expect(llm.invokeLLM).not.toHaveBeenCalled();
   });
 });

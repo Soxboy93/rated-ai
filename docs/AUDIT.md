@@ -1,5 +1,7 @@
 # Rated AI — Codebase Audit & Feature Matrix
 
+> **Historical record.** This audit describes the first version of the app. Most features named here were fixed, rebuilt or removed since; the current scope is in `docs/SCOPE.md`.
+
 > **Update (same day, after the first remediation pass):** items marked **[FIXED]** in section 2 were addressed in the working tree after this audit was written; the feature matrix in section 3 and the build table describe the code **as audited (`08bcb9b`)**. See section 9 for what changed and what is still open. Nothing here has been run against a live database.
 
 Audited commit: `08bcb9b` · Date: 2026-10-12 · Method: static read of `server/routers.ts`, `server/db.ts`, `drizzle/schema.ts`, `client/src/App.tsx` and the pages that call the API, plus running the checks.
