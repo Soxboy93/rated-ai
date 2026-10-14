@@ -219,3 +219,10 @@ html.a11y-calm .kid *, html.a11y-calm .kid *::before, html.a11y-calm .kid *::aft
   .k-brandtext { display: none; }
   .k-top .kid-wrap { gap: 6px; padding-inline: 12px; }
 }
+@media (max-width: 440px) { .k-player-name { display: none; } }
+
+/* The top bar can shrink instead of pushing the page wider than the screen (a page wider than the screen makes iPad/iPhone Safari zoom out). */
+.k-top .kid-wrap > * { min-width: 0; flex-shrink: 1; }
+.k-top .kid-wrap > .k-btn, .k-top .kid-wrap > .lang-toggle, .k-top .kid-wrap > .k-brandmark { flex-shrink: 0; }
+.k-player { overflow: hidden; }
+.k-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11ch; }

@@ -188,6 +188,17 @@
   }
 }
 
+/* Keep the page from zooming or shifting on tablets and phones:
+   - never let a stray element widen the page (Safari then zooms the whole page out),
+   - no double-tap zoom anywhere, no pinch zoom in the students' area (grown-up screens can still pinch),
+   - form fields at 16px on touch screens (Safari zooms in on smaller ones when focused),
+   - the scrollbar space is always reserved, so the layout does not jump when a page becomes scrollable. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: clip; scrollbar-gutter: stable; }
+body { overflow-x: clip; }
+a, button, [role="button"], input, select, textarea, label, summary { touch-action: manipulation; }
+.kid { touch-action: pan-x pan-y; }
+@media (pointer: coarse) { input, select, textarea { font-size: 16px !important; } }
+
 /* One calm type system for the whole app (kid area, sign-in, parent and teacher area). */
 body { font-family: "Nunito", "Tajawal", system-ui, -apple-system, "Segoe UI", sans-serif; }
 :root[lang="ar"] body { font-family: "Tajawal", "Cairo", "Segoe UI", Tahoma, system-ui, sans-serif; letter-spacing: 0; }

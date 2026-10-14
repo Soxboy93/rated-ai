@@ -41,9 +41,9 @@ export default function KidShell({ title, back, bare = false, children }: { titl
             <span className="k-chip sun" title={t("{n} day streak", { n: progress.streakDays })}><span className="k-flame" aria-hidden="true">🔥</span>{progress.streakDays}</span>
           )}
           {child && (
-            <Link href="/me" className="k-chip" aria-label={t("{name}, level {level}", { name: child.childName, level: lp.level })} style={{ paddingInline: 5, textDecoration: "none" }}>
+            <Link href="/me" className="k-chip k-player" aria-label={t("{name}, level {level}", { name: child.childName, level: lp.level })} style={{ paddingInline: 5, textDecoration: "none" }}>
               <Avatar guide={guide} size={30} />
-              <span><bdi>{child.childName}</bdi></span>
+              <span className="k-player-name"><bdi>{child.childName}</bdi></span>
               <span className="k-chip brand" style={{ padding: "0 9px", fontSize: ".85rem" }}>{t("Lv {level}", { level: lp.level })}</span>
             </Link>
           )}
